@@ -103,7 +103,7 @@ tokens (18-19x ratio). Aider retries every ~10 min indefinitely. Ctrl-C ineffect
 
 ---
 
-### Trial Set 3 — After Runner Fixes (2026-03-04)
+### Trial Set 3 — After Runner Fixes (2026-03-04 morning)
 **Log**: `run-20260304-114920.log`
 **Result**: 13 completed, 4 degraded
 
@@ -117,6 +117,39 @@ broke Ctrl-C entirely — `tee` pipeline kept pipe alive after timeout killed ai
 **Git restore bug**: Claude Code saw deleted task files in git HEAD, ran
 `git checkout HEAD --` and stopped — never re-reading updated skill files. Step 0 added
 to SKILL.md to prevent this.
+
+---
+
+### Trial Set 4 — 12k Context Experiment (2026-03-04 afternoon)
+**Log**: `run-20260304-150619.log`
+**Context**: 12,000 tokens (reduced from 32k to test if smaller window helps)
+**Result**: Crashed at task 9 (HeartRateExtractor) — earlier than task 17-18 in prior runs
+
+**Failure mode**: Metal GPU OOM — `[metal::malloc] Resource limit (499000) exceeded` — a
+hard segfault, not a summarizer spiral. The model crashed mid-generation at 15:16:10 after
+successfully processing 100% of the prompt at 15:12:17 (4-minute generation before crash).
+
+**Root cause — KV cache sizing**: MLX pre-allocates a fixed GPU memory block sized to hold
+exactly N token positions, where N is the configured context length. With 12k that block is
+~3x smaller than with 32k. Task 9 required 6 reflection loops; by reflection 6, the live
+aider conversation had grown to 24 messages. The prompt for that request was ~3k tokens, but
+the KV cache must hold both prompt AND generated output simultaneously. When generated output
+tokens drove the total past ~12k mid-generation, the Metal allocator ran out of its pre-reserved
+block and segfaulted.
+
+**Why smaller context makes it worse, not better**:
+- Reducing context length does NOT reduce the difficulty of the task or the number of reflections
+- It DOES reduce how much KV cache memory MLX pre-allocates on the GPU
+- A hard task (many reflections, long conversation) hits the smaller ceiling sooner
+- The summarizer cannot help: it fired successfully at 15:11:52 (compressing past task history),
+  but the current task's 6 reflection messages stay in full and alone exceed 12k
+
+**Confirmed**: With 32k, task 9's 24-message conversation was ~10% of the window — no pressure.
+With 12k, the same conversation exceeded 100% of available KV cache mid-generation.
+
+**Conclusion**: Do not reduce context length below 32k for Qwen 30B on this task set. The
+summarizer spiral (task 17-18 with 32k) is a different, less catastrophic failure — it stalls
+rather than crashing the model process entirely.
 
 ---
 
@@ -161,12 +194,16 @@ Every write fails. Recurring across all models tested.
 
 1. **Summarizer spiral**: `--timeout` doesn't work with streaming. Real fix: `stream: false`
    in aider config, or server-side `max_tokens` cap in LM Studio. Not yet resolved.
-2. **fastavro arg order**: Recurring across models. Add explicit example to `writing-guide.md`.
-3. **row_factory assumption**: SleepExtractor and HeartRateExtractor assume `sqlite3.Row`.
+   - Workaround: keep context at 32k; spiral only hits on tasks 17-18 (end of run)
+2. **Context length — do not reduce below 32k**: Smaller context pre-allocates a smaller MLX
+   KV cache. Hard tasks with many reflections hit the ceiling mid-generation and segfault the
+   model process entirely (worse than a spiral). See Trial Set 4.
+3. **fastavro arg order**: Recurring across models. Add explicit example to `writing-guide.md`.
+4. **row_factory assumption**: SleepExtractor and HeartRateExtractor assume `sqlite3.Row`.
    Fix: set `row_factory` in `base.extract()` or enforce positional access in `_to_avro_dict`.
-4. **DAG wiring split**: DAG task (12) ran before extractors 13-17 existed. Consider
+5. **DAG wiring split**: DAG task (12) ran before extractors 13-17 existed. Consider
    splitting into structure task (early) + wiring task (deferred, after all components exist).
-5. **UUID dedup**: Add canonical dedup example to `writing-guide.md`.
+6. **UUID dedup**: Add canonical dedup example to `writing-guide.md`.
 
 ---
 
