@@ -271,7 +271,7 @@ documented in `tooling.md`.
 
 ---
 
-### Trial Set 7 — After Conftest + UUIDStore + DAG Redesign (2026-03-10)
+### Trial Set 7 — After Conftest + UUIDStore + DAG Redesign (2026-03-10 morning)
 **Log**: `run-20260310-105632.log`
 **Context**: 32,768 tokens
 **Model**: Qwen 3 Coder 30B Q4
@@ -292,13 +292,13 @@ documented in `tooling.md`.
 | 03 GoogleDriveClient | ✅ | |
 | 04 MinioWriter | ✅ | Second clean pass; real fastavro roundtrip passed |
 | 05 RabbitmqPublisher | ✅ | |
-| 06 UUIDStore | ⚠️ DEGRADED | Still `no such table: seen_uuids` — see analysis |
+| 06 UUIDStore | ⚠️ DEGRADED | Still `no such table: seen_uuids` — multi-connection `:memory:` trap |
 | 07 StepsExtractor | ✅ | |
 | 08 BloodGlucoseExtractor | ✅ | |
 | 09 HeartRateExtractor | ✅ | Third consecutive clean pass |
 | 10 HRVExtractor | ✅ | |
 | 11 SleepExtractor | ✅ | |
-| 12 Airflow DAG | ⚠️ DEGRADED | `_extract_and_ingest` not exported at module level |
+| 12 Airflow DAG | ⚠️ DEGRADED | `_extract_and_ingest` defined as closure, not module-level |
 | 13 ActiveCaloriesExtractor | ❌ HALTED | aider false-positive; `test_dag.py` collection fails |
 | 14–18 | NOT RUN | Blocked by task 13 halt |
 
@@ -316,134 +316,197 @@ deferred import triggers the error. After 3 reflections the model made no progre
 understood the error message but did not recognize that the fix was to either (a) make the
 module-level singleton lazy, or (b) not instantiate at module level at all.
 
-**Current state of settings.py**: Has `settings = Settings()` at module level, unchanged
-from what the model wrote.
-
 **Cascading effect**: Task 12 and task 13 both import `from plugins.config.settings import
 settings`. With the module-level instantiation present, importing the DAG module also blows
-up — which is why the DAG test can't even be collected (see task 12 and task 13 analyses).
+up — contributing to task 12's failure.
 
 #### Task 6 — UUIDStore degraded again (`no such table: seen_uuids`)
-Despite the new `test_schema_initialized_on_construction` test that directly calls `mark_seen()`
-immediately after construction, the model still produced a `UUIDStore` that doesn't call
-CREATE TABLE in `__init__`. Looking at the final state of `uuid_store.py`: the model
-implemented `_init_schema()` as a separate method that contains the CREATE TABLE call, and
-called `self._init_schema()` from `__init__`. The schema initialization IS present —
-but the model used `sqlite3.connect(self.db_path)` for schema init and again separately in
-`mark_seen()`.
-
-**Root cause for `:memory:` databases**: Each call to `sqlite3.connect(":memory:")` creates
-a completely independent in-memory database. `_init_schema()` creates the table in one
-in-memory database instance; `mark_seen()` opens a fresh connection which is a different
-empty database entirely — so `seen_uuids` does not exist in that connection. The model's
-`_init_schema()` design is correct for file-backed databases (where the file persists between
-connections) but broken for `:memory:`.
-
-The model received the `no such table: seen_uuids` error repeatedly across 3 reflections and
-each time adjusted `mark_seen()` (swapping timestamp queries, reordering statements) without
-ever diagnosing that the root cause was a fresh connection opening a fresh empty database.
-
-**Generic principle this surfaces**: The `:memory:` SQLite database is a trap for any
-persistence class that opens a new connection per method call. The correct pattern for `:memory:`
-testing is to hold a single connection open for the lifetime of the object. This is a
-design constraint that should be explicit in the task doc — either mandate single-connection
-design, or use a `file::memory:?cache=shared` URI that allows multiple connections to the
-same in-memory database. It is not sufficient to just test for schema initialization in the
-gate; the test harness must also prevent the multi-connection anti-pattern from hiding the
-real failure.
+Despite the new `test_schema_initialized_on_construction` test, the model produced a
+`UUIDStore` with `_init_schema()` called from `__init__` — but each method opens a fresh
+`sqlite3.connect(self.db_path)`. For `:memory:` databases, each call to
+`sqlite3.connect(":memory:")` creates a completely independent in-memory database.
+`_init_schema()` creates the table in one instance; `mark_seen()` opens a fresh, empty
+instance — `seen_uuids` does not exist there. The model adjusted `mark_seen()` across 3
+reflections (swapping timestamp queries) without ever diagnosing the multi-connection root
+cause.
 
 #### Task 12 — Airflow DAG degraded (`_extract_and_ingest` not importable)
-`test_dag.py` does `from dags.health_connect_ingest import _extract_and_ingest`. The model
-defined `_extract_and_ingest` as a closure (nested function inside `create_dag()`), not as a
-module-level function. So when pytest tries to import it from the module, it is not found.
-
-Additionally, importing `dags.health_connect_ingest` triggers the settings cascade failure
-from task 1 (see above) — `from plugins.config.settings import settings` at the top of the
-DAG file fires module-level Settings instantiation, which raises `ValidationError`.
-
-The model received two distinct errors across 3 reflections: first the settings
-`ValidationError`, then (after partially fixing that) the `ImportError: cannot import name
-'_extract_and_ingest'`. It addressed each partially but exhausted reflections before resolving
-either. Aider eventually exited 0 (false positive), but the runner's independent pytest
-verification caught the failure and marked degraded (continued rather than halted, unlike
-Trial 6 — the runner's halt/degrade decision is based on whether aider exited 0 or non-zero).
+Despite the task doc specifying `_extract_and_ingest` as module-level, the model defined it
+as a nested closure inside `create_dag()`. The settings cascade failure from task 1 added a
+second simultaneous error. After 3 reflections partially addressing each, aider exited 0
+(false positive) — runner's independent verification caught it and marked degraded.
 
 #### Task 13 — ActiveCaloriesExtractor halted (test_dag.py collection failure)
-Aider completed the active calories implementation and exited 0 after one reflection that
-fixed `from typing import Any, list` (invalid in Python 3.11 — `list` is a builtin, not in
-`typing`). However, the runner's independent pytest invocation runs the full test suite, not
-just the task-specific test file. `test_dag.py` was already broken from task 12, and its
-import error caused pytest to exit 2 (collection error) — which the runner correctly
-interprets as a real failure.
-
-**Why this halted instead of degraded**: Aider exited 0 (it thought the task succeeded).
-The runner's independent verification failed (exit 2). This is the same false-positive
-detection that halted Trial 6 at task 12. The runner prints "Tests are failing but aider
-reported success" and stops with `re-run with: ./run-tasks.sh --start 13`.
-
-**Root cause**: The `test_dag.py` breakage from task 12 bleeds into all subsequent tasks
-because the runner's final verification runs the full suite. Any task from 13 onward will
-appear to fail as long as `test_dag.py` cannot be collected.
+The ActiveCalories implementation itself was correct (aider fixed a `from typing import Any,
+list` error and exited 0). But the runner's full-suite verification included `test_dag.py`,
+which was broken from task 12. Pytest exit 2 (collection error) triggered the false-positive
+halt. All tasks 14–18 blocked.
 
 ---
 
-## Generated Code Quality Assessment (updated 2026-03-10 after Trial Set 7)
+### Trial Set 8 — Codestral 22B Head-to-Head (2026-03-10, same scaffold as Trial 7)
+**Log**: `run-20260310-112757.log`
+**Context**: N/A (Codestral runs via LM Studio, not MLX — no GPU KV cache constraint)
+**Model**: Codestral 22B v0.1
+**Setup**: Code reverted to pre-Trial-7 state; same task scaffold (Trial 7 conftest + task docs)
+**Result**: 5/18 ✅, 13 degraded ⚠️, 0 halts ❌
+
+| Task | Qwen T7 | Codestral T8 | Notes |
+|------|---------|--------------|-------|
+| 01 Settings | ⚠️ | ⚠️ | Both: module-level `settings = Settings()` ValidationError |
+| 02 BaseRecordExtractor | ✅ | ✅ | Both clean |
+| 03 GoogleDriveClient | ✅ | ⚠️ | Codestral: `AttributeError: module does not have attribute 'Credentials'` |
+| 04 MinioWriter | ✅ | ⚠️ | Codestral: class named `MinIOWriter` (wrong case); then circular import after rename attempt |
+| 05 RabbitmqPublisher | ✅ | ⚠️ | Codestral: `NotImplementedError` left in `publish()` body |
+| 06 UUIDStore | ⚠️ | ✅ | Codestral solved it; Qwen stuck on multi-connection `:memory:` trap |
+| 07 StepsExtractor | ✅ | ⚠️ | Codestral: `NotImplementedError` left in `_query_rows()` body |
+| 08 BloodGlucoseExtractor | ✅ | ✅ | Both clean |
+| 09 HeartRateExtractor | ✅ | ⚠️ | Codestral: `TypeError: Can't instantiate abstract class ... with abstract methods _query_rows, _to_avro_dict` — didn't override the base class methods |
+| 10 HRVExtractor | ✅ | ✅ | Both clean |
+| 11 SleepExtractor | ✅ | ⚠️ | Codestral: `AttributeError: 'SleepExtractor' object has no attribute '_sessions'` |
+| 12 Airflow DAG | ⚠️ | ⚠️ | Codestral: circular import (`DAG_ID` not importable); settings cascade also present |
+| 13 ActiveCaloriesExtractor | ❌ HALT | ⚠️ | Codestral degraded but continued (no halt — aider exited non-zero) |
+| 14 DistanceExtractor | NOT RUN | ⚠️ | Codestral degraded; `test_dag.py` collection failure cascade |
+| 15 TotalCaloriesExtractor | NOT RUN | ✅ | Codestral passed despite `test_dag.py` cascade — unclear why |
+| 16 O2SatExtractor | NOT RUN | ⚠️ | Codestral edited `test_dag.py` directly to fix EXTRACTORS count |
+| 17 ExerciseSessionExtractor | NOT RUN | ⚠️ | Same |
+| 18 Docker | NOT RUN | ⚠️ | `test_dag.py` assertion failure `assert 1 == 10` after Codestral corrupted test file |
+
+#### Codestral vs Qwen — task-by-task comparison
+
+**Tasks where Qwen is clearly better** (Qwen ✅, Codestral ⚠️):
+- **Task 3 (GoogleDriveClient)**: Codestral left a `google.oauth2.credentials.Credentials` attribute access unimplemented — the mock target didn't exist in the module. Qwen passed cleanly.
+- **Task 4 (MinioWriter)**: Codestral wrote `class MinIOWriter` (capitalizing IO) — mismatching the name the test imports (`MinioWriter`). After Codestral tried to fix by renaming the test import, it triggered a circular import (`partially initialized module`). Qwen passed cleanly with the real fastavro roundtrip.
+- **Task 5 (RabbitmqPublisher)**: Codestral left `raise NotImplementedError` in `publish()`. Qwen implemented it correctly.
+- **Task 7 (StepsExtractor)**: Codestral left `raise NotImplementedError` in `_query_rows()`. Qwen implemented it correctly.
+- **Task 9 (HeartRateExtractor)**: Codestral failed to override the abstract base class methods, resulting in `TypeError: Can't instantiate abstract class`. The task doc explicitly specified the `extract()` override pattern — Codestral ignored it. Qwen has passed this cleanly three times in a row since the override pattern was introduced.
+- **Task 11 (SleepExtractor)**: Codestral wrote `_sessions` as an attribute that doesn't exist. Qwen passed.
+
+**Tasks where Codestral is clearly better** (Codestral ✅, Qwen ⚠️):
+- **Task 6 (UUIDStore)**: Codestral solved the `:memory:` multi-connection trap that Qwen failed across two trials. Codestral used a persistent connection (`self._conn`) held for the object lifetime — the correct design. Qwen kept reopening connections.
+
+**Tasks both failed**:
+- **Task 1 (Settings)**: Both wrote `settings = Settings()` at module level. Identical failure.
+- **Task 12 (Airflow DAG)**: Both failed, though for slightly different immediate reasons. Codestral hit a circular import (`DAG_ID` not importable), while Qwen had `_extract_and_ingest` as a closure. Both are structurally caused by the settings cascade.
+
+#### Codestral-specific failures
+
+**`NotImplementedError` left in stubs**: Tasks 5 and 7 — Codestral replaced the task file's
+stub body with a real implementation in some methods but left `raise NotImplementedError`
+verbatim in others. This is a distinct failure mode not seen with Qwen: Codestral partially
+implements methods and leaves placeholders. Qwen either implements fully or produces wrong
+logic — but does not leave stubs in place.
+
+**Class naming inconsistency (task 4)**: Codestral named the class `MinIOWriter` despite the
+test importing `MinioWriter`. This is a basic naming discipline failure. When it noticed the
+mismatch, it tried to fix the test import instead of the class name, then introduced a
+circular import. Qwen matched the test's expected name correctly.
+
+**`test_dag.py` test file corruption (tasks 16–18)**: Starting at task 16, Codestral began
+editing `test_dag.py` directly to work around the `EXTRACTORS` count mismatch — removing the
+import from the DAG module and hardcoding a local list of 1 extractor. By task 18, the file
+contained `assert 1 == 10` (from Codestral patching the assertion to match its hardcoded
+list, then the count growing) — making the test permanently broken. Qwen never touched
+test files; when it encountered `test_dag.py` errors it degraded and let the runner halt.
+**This is the most serious Codestral failure mode**: it modified test files rather than
+implementation files, defeating the purpose of the TDD approach.
+
+#### No halts with Codestral
+Codestral never triggered a false-positive halt because it always exited aider non-zero when
+tests failed. The Qwen halt at task 13 was caused by aider exiting 0 despite test failure —
+a false-positive. Codestral was more "honest" in that aider exit codes accurately reflected
+test status. However, this meant the runner continued running tasks 13–18 with a broken
+`test_dag.py`, accumulating cascaded failures rather than stopping.
+
+---
+
+## Model Comparison Summary (Trials 6–8, TDD strategy)
+
+| Capability | Qwen 30B Q4 | Codestral 22B |
+|------------|-------------|---------------|
+| Follows abstract base class override instructions | ✅ (Trial 6+) | ❌ (ignored in Trial 8) |
+| Implements methods completely (no leftover stubs) | ✅ | ⚠️ (leaves NotImplementedError) |
+| Class naming discipline | ✅ | ⚠️ (MinIOWriter vs MinioWriter) |
+| SQLite `:memory:` single-connection pattern | ❌ (2 failures) | ✅ |
+| Module-level `settings = Settings()` trap | ❌ | ❌ (both fail identically) |
+| Respects test file boundary (never edits tests) | ✅ | ❌ (edits test files when stuck) |
+| False-positive exit codes (aider exits 0 on failure) | ⚠️ (causes halts) | ✅ (accurate exit codes) |
+| Cascade containment | ⚠️ (halts at first cascade) | ❌ (continues, accumulates damage) |
+
+**Overall TDD pass rate (Trial 7 / Trial 8)**: Qwen 9/18 (run to task 13) vs Codestral 5/18 (full run)
+
+Qwen is better at reasoning-heavy tasks and following specific instructed patterns. Codestral
+is better at straightforward SQLite design but has a critical flaw: it edits test files when
+stuck, which corrupts the test suite for all subsequent tasks. The TDD approach depends on
+test files being authoritative — a model that modifies them breaks the entire contract.
+
+---
+
+## Generated Code Quality Assessment (updated 2026-03-10 after Trial Set 8)
 
 ### Infrastructure
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Settings | ⚠️ | Module-level `settings = Settings()` blows up at import without env vars; needs lazy singleton or deferred init |
-| BaseRecordExtractor | ✅ | |
-| GoogleDriveClient | ✅ | streaming download loop, correct error types |
-| MinioWriter | ✅ | fixed in Trial 6, confirmed again in Trial 7 |
-| RabbitmqPublisher | ✅ | minor: hardcoded timestamp placeholder |
-| UUIDStore | ⚠️ | Multi-connection design broken for `:memory:`; needs single persistent connection |
+| Component | Qwen Status | Codestral Status | Notes |
+|-----------|-------------|------------------|-------|
+| Settings | ⚠️ | ⚠️ | Both: module-level instantiation at import; needs lazy init |
+| BaseRecordExtractor | ✅ | ✅ | |
+| GoogleDriveClient | ✅ | ⚠️ | Codestral: missing Credentials attribute |
+| MinioWriter | ✅ | ⚠️ | Codestral: MinIOWriter naming + circular import |
+| RabbitmqPublisher | ✅ | ⚠️ | Codestral: NotImplementedError left in publish() |
+| UUIDStore | ⚠️ | ✅ | Qwen: multi-connection trap; Codestral: uses self._conn correctly |
 
 ### Extractors
 
-| Extractor | Status | Notes |
-|-----------|--------|-------|
-| StepsExtractor | ✅ | |
-| BloodGlucoseExtractor | ✅ | |
-| HeartRateExtractor | ✅ | 3rd consecutive clean pass |
-| HRVExtractor | ✅ | |
-| SleepExtractor | ✅ | |
-| ActiveCaloriesExtractor | ⚠️ | Aider succeeded but test_dag.py cascade blocked verification |
-| Distance, TotalCalories, O2Sat, ExerciseSession | NOT RUN | Blocked by task 13 halt |
+| Extractor | Qwen Status | Codestral Status | Notes |
+|-----------|-------------|------------------|-------|
+| StepsExtractor | ✅ | ⚠️ | Codestral: NotImplementedError left in _query_rows() |
+| BloodGlucoseExtractor | ✅ | ✅ | |
+| HeartRateExtractor | ✅ | ⚠️ | Codestral: didn't override abstract methods |
+| HRVExtractor | ✅ | ✅ | |
+| SleepExtractor | ✅ | ⚠️ | Codestral: missing _sessions attribute |
+| ActiveCaloriesExtractor | ⚠️* | ⚠️ | *Qwen: halted by test_dag cascade; Codestral: degraded |
+| DistanceExtractor | NOT RUN | ⚠️ | Codestral: test_dag cascade |
+| TotalCaloriesExtractor | NOT RUN | ✅ | Codestral: passed (unclear why cascade didn't block) |
+| O2SatExtractor | NOT RUN | ⚠️ | Codestral: edited test_dag.py |
+| ExerciseSessionExtractor | NOT RUN | ⚠️ | Codestral: edited test_dag.py |
 
-### DAG — blocked
-`_extract_and_ingest` defined as a closure (not module-level). Settings cascade also blocks
-import. Both need fixing before tasks 13–18 can be verified.
+### DAG
+
+| | Qwen | Codestral |
+|-|------|-----------|
+| Status | ⚠️ | ⚠️ |
+| Issue | `_extract_and_ingest` as closure; settings cascade | Circular import; test_dag.py corrupted by tasks 16–18 |
 
 ---
 
 ## Open Issues
 
-1. **Settings — module-level instantiation**: `settings = Settings()` at module top-level
-   causes `ValidationError` at import time in any test environment without env vars. Needs
-   to be lazy (e.g. `_settings = None` + a `get_settings()` accessor) or removed from module
-   level entirely. This cascades into DAG task 12 and all subsequent tasks.
+1. **Settings — module-level instantiation**: Both models write `settings = Settings()` at
+   module top-level. Fix must be in the task doc: explicitly forbid module-level instantiation
+   and require a lazy accessor (`get_settings()`) or deferred init pattern. This is now a
+   known trap for both models.
 
-2. **UUIDStore — multi-connection `:memory:` trap**: Schema is initialized correctly but in
-   a separate connection from the one used by `mark_seen()`. For `:memory:` databases each
-   `sqlite3.connect(":memory:")` is a fresh empty database. Fix: hold a single connection as
-   `self._conn` for the object lifetime, or use `file::memory:?cache=shared` URI mode.
+2. **UUIDStore — multi-connection `:memory:` trap (Qwen only)**: Qwen keeps reopening
+   connections. Fix: task doc must explicitly mandate a persistent `self._conn` and explain
+   why `:memory:` databases don't persist between connections.
 
-3. **Airflow DAG — `_extract_and_ingest` as closure**: Model nested it inside `create_dag()`
-   rather than defining it at module level. Test imports it from module scope — not found.
-   Fix: move `_extract_and_ingest` out of `create_dag()` to module level.
+3. **Airflow DAG — settings cascade + closure**: Both models produce a broken DAG due to
+   settings cascade. Fix: resolve issue 1 first (lazy settings). Then task doc must
+   explicitly state `_extract_and_ingest` is module-level (outside any function).
 
-4. **Task 13+ blocked by test_dag.py**: Any run starting at task 13 will halt immediately
-   because the full-suite verification catches the `test_dag.py` collection error from the
-   broken DAG. Must fix task 12 first, then re-run from task 12.
+4. **Codestral test file corruption**: Codestral edits test files when stuck on cascade
+   failures. The runner must detect and reject edits to test files. Until then, Codestral
+   should not be used for tasks 13+ without first fixing task 12.
 
-5. **Summarizer fast failures**: "cannot schedule new futures after shutdown" after each task —
-   harmless but noisy. Real fix: `stream: false` in aider config or LM Studio `max_tokens` cap.
+5. **Task 12 must pass before tasks 13+**: Both models' tasks 13–18 degrade/halt due to
+   `test_dag.py` collection failures. Fixing task 12 is a prerequisite for the second half
+   of the task set.
 
-6. **Context length — do not reduce below 32k**: See Trial Set 4.
+6. **Summarizer fast failures (Qwen)**: "cannot schedule new futures after shutdown" after
+   each task — harmless but noisy. Real fix: `stream: false` in aider config or LM Studio
+   `max_tokens` cap.
 
-7. **Tasks 14–18 not run**: Once tasks 1, 6, 12 are fixed, re-run from task 12.
+7. **Context length — do not reduce below 32k (Qwen/MLX)**: See Trial Set 4.
 
 ---
 
