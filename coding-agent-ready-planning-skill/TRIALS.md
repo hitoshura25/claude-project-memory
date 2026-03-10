@@ -271,18 +271,134 @@ documented in `tooling.md`.
 
 ---
 
-## Generated Code Quality Assessment (updated 2026-03-09 after Trial Set 6)
+### Trial Set 7 — After Conftest + UUIDStore + DAG Redesign (2026-03-10)
+**Log**: `run-20260310-105632.log`
+**Context**: 32,768 tokens
+**Model**: Qwen 3 Coder 30B Q4
+**Changes applied before this run** (Trial 6 root causes addressed):
+- Conftest: `airflow.utils.task_group` added to `_AIRFLOW_MOCKS`
+- Conftest: `sqlite_conn` fixture now sets `row_factory = sqlite3.Row`
+- Task 06 (UUIDStore): new test `test_schema_initialized_on_construction` calls `mark_seen()` immediately after `UUIDStore(":memory:")` — directly tests that CREATE TABLE happens in `__init__`
+- Task 12 (DAG): redesigned — `_extract_and_ingest` is now a module-level function (not a closure), directly importable and testable; conftest mock list explicitly enumerated in task doc
+- Tasks 13–17: no fixture changes; rely on `sqlite_conn`
+- `mock_fastavro_writer` fixture removed from conftest; task 04 (MinioWriter) switched to real fastavro roundtrip test with explicit arg-order callout in task doc
+
+**Result**: 9/12 ✅, 3 degraded ⚠️ (tasks 1, 6, 12), halted at task 13 ❌ (tasks 14–18 not run)
+
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ⚠️ DEGRADED | Module-level `settings = Settings()` blows up at import — no env vars |
+| 02 BaseRecordExtractor | ✅ | |
+| 03 GoogleDriveClient | ✅ | |
+| 04 MinioWriter | ✅ | Second clean pass; real fastavro roundtrip passed |
+| 05 RabbitmqPublisher | ✅ | |
+| 06 UUIDStore | ⚠️ DEGRADED | Still `no such table: seen_uuids` — see analysis |
+| 07 StepsExtractor | ✅ | |
+| 08 BloodGlucoseExtractor | ✅ | |
+| 09 HeartRateExtractor | ✅ | Third consecutive clean pass |
+| 10 HRVExtractor | ✅ | |
+| 11 SleepExtractor | ✅ | |
+| 12 Airflow DAG | ⚠️ DEGRADED | `_extract_and_ingest` not exported at module level |
+| 13 ActiveCaloriesExtractor | ❌ HALTED | aider false-positive; `test_dag.py` collection fails |
+| 14–18 | NOT RUN | Blocked by task 13 halt |
+
+#### Task 1 — Settings degraded (module-level instantiation at import)
+The model wrote `settings = Settings()` at module level in `plugins/config/settings.py`.
+`Settings` is a pydantic-settings `BaseSettings` subclass with 7 required fields (no
+defaults). When any other module imports `settings`, the instantiation fires immediately at
+import time — and without the required env vars set, pydantic raises `ValidationError: 7
+validation errors for Settings`.
+
+The test (`test_defaults_applied`) uses `_make_settings()`, which does a deferred
+`import plugins.config.settings as mod` inside the function body — specifically to control
+when the module loads. But the model placed the instantiation at top level, so even a
+deferred import triggers the error. After 3 reflections the model made no progress — it
+understood the error message but did not recognize that the fix was to either (a) make the
+module-level singleton lazy, or (b) not instantiate at module level at all.
+
+**Current state of settings.py**: Has `settings = Settings()` at module level, unchanged
+from what the model wrote.
+
+**Cascading effect**: Task 12 and task 13 both import `from plugins.config.settings import
+settings`. With the module-level instantiation present, importing the DAG module also blows
+up — which is why the DAG test can't even be collected (see task 12 and task 13 analyses).
+
+#### Task 6 — UUIDStore degraded again (`no such table: seen_uuids`)
+Despite the new `test_schema_initialized_on_construction` test that directly calls `mark_seen()`
+immediately after construction, the model still produced a `UUIDStore` that doesn't call
+CREATE TABLE in `__init__`. Looking at the final state of `uuid_store.py`: the model
+implemented `_init_schema()` as a separate method that contains the CREATE TABLE call, and
+called `self._init_schema()` from `__init__`. The schema initialization IS present —
+but the model used `sqlite3.connect(self.db_path)` for schema init and again separately in
+`mark_seen()`.
+
+**Root cause for `:memory:` databases**: Each call to `sqlite3.connect(":memory:")` creates
+a completely independent in-memory database. `_init_schema()` creates the table in one
+in-memory database instance; `mark_seen()` opens a fresh connection which is a different
+empty database entirely — so `seen_uuids` does not exist in that connection. The model's
+`_init_schema()` design is correct for file-backed databases (where the file persists between
+connections) but broken for `:memory:`.
+
+The model received the `no such table: seen_uuids` error repeatedly across 3 reflections and
+each time adjusted `mark_seen()` (swapping timestamp queries, reordering statements) without
+ever diagnosing that the root cause was a fresh connection opening a fresh empty database.
+
+**Generic principle this surfaces**: The `:memory:` SQLite database is a trap for any
+persistence class that opens a new connection per method call. The correct pattern for `:memory:`
+testing is to hold a single connection open for the lifetime of the object. This is a
+design constraint that should be explicit in the task doc — either mandate single-connection
+design, or use a `file::memory:?cache=shared` URI that allows multiple connections to the
+same in-memory database. It is not sufficient to just test for schema initialization in the
+gate; the test harness must also prevent the multi-connection anti-pattern from hiding the
+real failure.
+
+#### Task 12 — Airflow DAG degraded (`_extract_and_ingest` not importable)
+`test_dag.py` does `from dags.health_connect_ingest import _extract_and_ingest`. The model
+defined `_extract_and_ingest` as a closure (nested function inside `create_dag()`), not as a
+module-level function. So when pytest tries to import it from the module, it is not found.
+
+Additionally, importing `dags.health_connect_ingest` triggers the settings cascade failure
+from task 1 (see above) — `from plugins.config.settings import settings` at the top of the
+DAG file fires module-level Settings instantiation, which raises `ValidationError`.
+
+The model received two distinct errors across 3 reflections: first the settings
+`ValidationError`, then (after partially fixing that) the `ImportError: cannot import name
+'_extract_and_ingest'`. It addressed each partially but exhausted reflections before resolving
+either. Aider eventually exited 0 (false positive), but the runner's independent pytest
+verification caught the failure and marked degraded (continued rather than halted, unlike
+Trial 6 — the runner's halt/degrade decision is based on whether aider exited 0 or non-zero).
+
+#### Task 13 — ActiveCaloriesExtractor halted (test_dag.py collection failure)
+Aider completed the active calories implementation and exited 0 after one reflection that
+fixed `from typing import Any, list` (invalid in Python 3.11 — `list` is a builtin, not in
+`typing`). However, the runner's independent pytest invocation runs the full test suite, not
+just the task-specific test file. `test_dag.py` was already broken from task 12, and its
+import error caused pytest to exit 2 (collection error) — which the runner correctly
+interprets as a real failure.
+
+**Why this halted instead of degraded**: Aider exited 0 (it thought the task succeeded).
+The runner's independent verification failed (exit 2). This is the same false-positive
+detection that halted Trial 6 at task 12. The runner prints "Tests are failing but aider
+reported success" and stops with `re-run with: ./run-tasks.sh --start 13`.
+
+**Root cause**: The `test_dag.py` breakage from task 12 bleeds into all subsequent tasks
+because the runner's final verification runs the full suite. Any task from 13 onward will
+appear to fail as long as `test_dag.py` cannot be collected.
+
+---
+
+## Generated Code Quality Assessment (updated 2026-03-10 after Trial Set 7)
 
 ### Infrastructure
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Settings | ✅ | pydantic v2, env_prefix, extra="ignore" |
+| Settings | ⚠️ | Module-level `settings = Settings()` blows up at import without env vars; needs lazy singleton or deferred init |
 | BaseRecordExtractor | ✅ | |
 | GoogleDriveClient | ✅ | streaming download loop, correct error types |
-| MinioWriter | ✅ | fixed in Trial 6 via mock_fastavro_writer fixture |
+| MinioWriter | ✅ | fixed in Trial 6, confirmed again in Trial 7 |
 | RabbitmqPublisher | ✅ | minor: hardcoded timestamp placeholder |
-| UUIDStore | ⚠️ | missing CREATE TABLE in __init__; needs re-run |
+| UUIDStore | ⚠️ | Multi-connection design broken for `:memory:`; needs single persistent connection |
 
 ### Extractors
 
@@ -290,44 +406,44 @@ documented in `tooling.md`.
 |-----------|--------|-------|
 | StepsExtractor | ✅ | |
 | BloodGlucoseExtractor | ✅ | |
-| HeartRateExtractor | ✅ | fixed in Trial 6 via override pattern |
+| HeartRateExtractor | ✅ | 3rd consecutive clean pass |
 | HRVExtractor | ✅ | |
-| SleepExtractor | ✅ | row_factory assumption may be fragile |
-| ActiveCalories, Distance, TotalCalories, O2Sat, ExerciseSession | NOT RUN | blocked by task 12 halt |
+| SleepExtractor | ✅ | |
+| ActiveCaloriesExtractor | ⚠️ | Aider succeeded but test_dag.py cascade blocked verification |
+| Distance, TotalCalories, O2Sat, ExerciseSession | NOT RUN | Blocked by task 13 halt |
 
 ### DAG — blocked
-Task 12 halted at import. Tasks 13–18 did not run.
+`_extract_and_ingest` defined as a closure (not module-level). Settings cascade also blocks
+import. Both need fixing before tasks 13–18 can be verified.
 
 ---
 
 ## Open Issues
 
-1. **UUIDStore — missing schema init**: `__init__` doesn't call CREATE TABLE. One-line fix.
-   Re-run with `--start 6`.
+1. **Settings — module-level instantiation**: `settings = Settings()` at module top-level
+   causes `ValidationError` at import time in any test environment without env vars. Needs
+   to be lazy (e.g. `_settings = None` + a `get_settings()` accessor) or removed from module
+   level entirely. This cascades into DAG task 12 and all subsequent tasks.
 
-2. **Airflow DAG — conftest mock gap**: `airflow.utils.task_group` missing from `_AIRFLOW_MOCKS`.
-   Add it to conftest, then re-run with `--start 12`. Also audit for any other submodule paths
-   the DAG uses (e.g. `airflow.utils.task_group` was added by the model spontaneously — scan
-   the generated DAG file for all `from airflow.*` imports and cross-check against the mock list).
+2. **UUIDStore — multi-connection `:memory:` trap**: Schema is initialized correctly but in
+   a separate connection from the one used by `mark_seen()`. For `:memory:` databases each
+   `sqlite3.connect(":memory:")` is a fresh empty database. Fix: hold a single connection as
+   `self._conn` for the object lifetime, or use `file::memory:?cache=shared` URI mode.
 
-3. **Tasks 13–18 not run**: Once task 12 is fixed, re-run from task 12 to complete the set.
+3. **Airflow DAG — `_extract_and_ingest` as closure**: Model nested it inside `create_dag()`
+   rather than defining it at module level. Test imports it from module scope — not found.
+   Fix: move `_extract_and_ingest` out of `create_dag()` to module level.
 
-4. **Summarizer spiral / hang**: `--timeout` doesn't work with streaming. No longer hanging
-   (HeartRateExtractor fix eliminated the main spiral source) but the fast summarizer failures
-   ("cannot schedule new futures after shutdown") still appear after each task. Harmless but noisy.
-   Real fix: `stream: false` in aider config, or server-side `max_tokens` cap in LM Studio.
+4. **Task 13+ blocked by test_dag.py**: Any run starting at task 13 will halt immediately
+   because the full-suite verification catches the `test_dag.py` collection error from the
+   broken DAG. Must fix task 12 first, then re-run from task 12.
 
-5. **Context length — do not reduce below 32k**: Smaller context pre-allocates a smaller MLX
-   KV cache. Hard tasks with many reflections hit the ceiling mid-generation and segfault the
-   model process entirely. See Trial Set 4.
+5. **Summarizer fast failures**: "cannot schedule new futures after shutdown" after each task —
+   harmless but noisy. Real fix: `stream: false` in aider config or LM Studio `max_tokens` cap.
 
-6. **row_factory assumption**: SleepExtractor uses `row["key"]` access. Needs `conn.row_factory
-   = sqlite3.Row` set in `base.extract()` or enforced across all extractors.
+6. **Context length — do not reduce below 32k**: See Trial Set 4.
 
-7. **DAG wiring — tasks 13-17 extractors missing**: The DAG was assembled before extractors
-   13-17 (ActiveCalories, Distance, etc.) existed. `EXTRACTORS` list only has 5 entries; the
-   remaining extractors need to be wired in as a follow-up or the DAG task needs to be
-   deferred until after all extractors exist.
+7. **Tasks 14–18 not run**: Once tasks 1, 6, 12 are fixed, re-run from task 12.
 
 ---
 
