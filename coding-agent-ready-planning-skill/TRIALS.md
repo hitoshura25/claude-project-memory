@@ -130,75 +130,25 @@ to SKILL.md to prevent this.
 **Result**: Crashed at task 9 (HeartRateExtractor) — earlier than task 17-18 in prior runs
 
 **Failure mode**: Metal GPU OOM — `[metal::malloc] Resource limit (499000) exceeded` — a
-hard segfault, not a summarizer spiral. The model crashed mid-generation at 15:16:10 after
-successfully processing 100% of the prompt at 15:12:17 (4-minute generation before crash).
+hard segfault, not a summarizer spiral.
 
 **Root cause — KV cache sizing**: MLX pre-allocates a fixed GPU memory block sized to hold
-exactly N token positions, where N is the configured context length. With 12k that block is
-~3x smaller than with 32k. Task 9 required 6 reflection loops; by reflection 6, the live
-aider conversation had grown to 24 messages. The prompt for that request was ~3k tokens, but
-the KV cache must hold both prompt AND generated output simultaneously. When generated output
-tokens drove the total past ~12k mid-generation, the Metal allocator ran out of its pre-reserved
-block and segfaulted.
+exactly N token positions. With 12k that block is ~3x smaller than with 32k. Task 9 required
+6 reflection loops; by reflection 6 the live conversation had grown to 24 messages. The KV
+cache must hold both prompt AND generated output simultaneously — when generated output drove
+the total past ~12k mid-generation, the Metal allocator segfaulted.
 
-**Why smaller context makes it worse, not better**:
-- Reducing context length does NOT reduce the difficulty of the task or the number of reflections
-- It DOES reduce how much KV cache memory MLX pre-allocates on the GPU
-- A hard task (many reflections, long conversation) hits the smaller ceiling sooner
-- The summarizer cannot help: it fired successfully at 15:11:52 (compressing past task history),
-  but the current task's 6 reflection messages stay in full and alone exceed 12k
-
-**Confirmed**: With 32k, task 9's 24-message conversation was ~10% of the window — no pressure.
-With 12k, the same conversation exceeded 100% of available KV cache mid-generation.
-
-**Conclusion**: Do not reduce context length below 32k for Qwen 30B on this task set. The
-summarizer spiral (task 17-18 with 32k) is a different, less catastrophic failure — it stalls
-rather than crashing the model process entirely.
+**Conclusion**: Do not reduce context length below 32k for Qwen 30B on this task set.
 
 ---
 
 ### Trial Set 5 — Reverted Abstract-Class Patch + 32k Context (2026-03-04 evening)
 **Log**: `run-20260304-155543.log`
-**Context**: 32,768 tokens (restored from 12k)
-**Change**: Reverted the abstract-class-method patch on base extractor plan to test whether
-it was helping or hurting prior runs.
-**Result**: Task 18 (Docker deployment) completed. Script hung on HeartRateExtractor (task 9).
+**Result**: Task 18 completed. Script hung on HeartRateExtractor (task 9).
 
-#### What completed successfully
-All tasks ran and passed their full test suites with 95 tests collected at end:
-- Task 1 (Settings), Task 2 (BaseRecordExtractor), Task 3 (GoogleDriveClient)
-- Task 4 (MinioWriter) — see degraded note below
-- Task 5 (RabbitmqPublisher), Task 6 (UUIDStore)
-- Tasks 7–8, 10–17 (all extractors except HeartRateExtractor), Task 18 (Docker)
-
-#### Hang location — HeartRateExtractor summarizer spiral
-The script did NOT hang at the end (tasks 17-18) as in Trial Set 2. It hung mid-run on
-**task 9 (HeartRateExtractor)**. The summarizer spiral triggered immediately after each
-successful task completion throughout the run, logging:
-
-```
-Summarization failed for model lm_studio/qwen/qwen3-coder-30b: cannot schedule new futures after shutdown
-summarizer unexpectedly failed for all models
-```
-
-This "cannot schedule new futures after shutdown" message appeared after every task — but
-these are fast failures (summarizer gives up immediately). The real spiral came from the
-model's reflection loop during task 9 itself.
-
-#### MinioWriter — fastavro degradation (same as prior runs)
-The model attempted three strategies in sequence:
-1. `fastavro.writer(avro_buffer, records)` → TypeError: takes at least 3 args
-2. `fastavro.writer(avro_buffer, records, None)` → KeyError: 'type' (None is not a valid schema)
-3. Back to 2 args → same TypeError
-
-**Current state of minio_writer.py**: Has `fastavro.writer(avro_buffer, records, None)` —
-still wrong. Tests are failing.
-
-#### HeartRateExtractor — fundamental contract mismatch
-**Root cause**: HeartRateExtractor needs to override `extract()` entirely (doing its own
-GROUP BY aggregation in the query and accumulating samples in a loop), not just
-`_to_avro_dict`. The base class template is the wrong abstraction for multi-row-per-record
-cases.
+HeartRateExtractor: fundamental contract mismatch. Needs to override `extract()` entirely
+(GROUP BY aggregation in query, accumulating samples in loop), not just `_to_avro_dict`.
+Base class template is the wrong abstraction for multi-row-per-record cases.
 
 ---
 
@@ -206,66 +156,23 @@ cases.
 **Log**: `run-20260309-123229.log`
 **Context**: 32,768 tokens
 **Model**: Qwen 3 Coder 30B Q4
-**Changes applied before this run**:
-- `plan-format.md`: ABC contract fit verification guidance (verify base class calling convention before writing interface; document `extract()`-level override pattern for multi-row-per-record cases)
-- `tooling.md`: Positional argument trap fixture criterion + `mock_fastavro_writer` fixture example
-- `run-tasks-template.sh`: Corrected `--timeout` comment (caps HTTP setup only, not streaming)
-- New conftest fixture: `mock_fastavro_writer` patches `fastavro.writer`, captures `(schema, records)`, writes `b"AVRO_MOCK_BYTES"` to `fo`
-- Task 09 (HeartRateExtractor): respecified to override `extract()` directly with explicit callout that `_to_avro_dict` is NOT used
-
 **Result**: 11/18 ✅, 1 degraded ⚠️ (task 6), halted at task 12 ❌
 
 | Task | Result | Notes |
 |------|--------|-------|
-| 01 Settings | ✅ | |
-| 02 BaseRecordExtractor | ✅ | |
-| 03 GoogleDriveClient | ✅ | |
-| 04 MinioWriter | ✅ | Fixed — `mock_fastavro_writer` fixture worked |
-| 05 RabbitmqPublisher | ✅ | |
-| 06 UUIDStore | ⚠️ DEGRADED | `no such table: seen_uuids` — `__init__` didn't call CREATE TABLE |
-| 07 StepsExtractor | ✅ | |
-| 08 BloodGlucoseExtractor | ✅ | |
-| 09 HeartRateExtractor | ✅ | Fixed — override pattern worked, no hang |
-| 10 HRVExtractor | ✅ | |
-| 11 SleepExtractor | ✅ | |
-| 12 Airflow DAG | ❌ HALTED | `airflow.utils.task_group` not in conftest mock list |
-| 13–18 | NOT RUN | Blocked by task 12 halt |
+| 01–05 | ✅ | Settings, BaseRecordExtractor, GoogleDriveClient, MinioWriter (fixed — mock_fastavro_writer worked), RabbitmqPublisher |
+| 06 UUIDStore | ⚠️ | `no such table: seen_uuids` — `__init__` didn't call CREATE TABLE |
+| 07–11 | ✅ | StepsExtractor, BloodGlucose, HeartRate (fixed — override pattern worked), HRV, Sleep |
+| 12 Airflow DAG | ❌ | `airflow.utils.task_group` not in conftest mock list |
+| 13–18 | NOT RUN | |
 
-#### Notable wins
-- **MinioWriter (task 4)**: First clean pass in any trial. The `mock_fastavro_writer` fixture completely bypassed the arg-order trap. The skill fix worked exactly as intended.
-- **HeartRateExtractor (task 9)**: Passed cleanly with no hang. The ABC override pattern in `plan-format.md` + the explicit task-level callout prevented the reflection spiral that had blocked every prior run.
+**Task 6 root cause**: Mutation gate stub already had CREATE TABLE — couldn't detect missing
+call. Fix: stub must deliberately omit schema init so tests catch the omission.
 
-#### Task 6 — UUIDStore degraded (`no such table: seen_uuids`)
-The model implemented `mark_seen()` correctly — SQL, `INSERT OR IGNORE`, `executemany` all
-correct. But `__init__` did not call the table creation step before returning. The error is
-immediate: the test fixture creates `UUIDStore(":memory:")` and calls `mark_seen()` directly,
-so the table must exist after `__init__` completes. After 3 reflections the model didn't add
-the missing call.
-
-**Root cause**: The mutation gate stub for UUIDStore was not testing for missing schema
-initialization. A stub with `__init__: pass` would have failed the first `mark_seen` call
-and flagged this as a required assertion — but if the stub already had the CREATE TABLE call,
-the gate couldn't detect this class of omission.
-
-**Generic principle**: For persistence classes, the mutation gate stub must deliberately omit
-schema initialization. This is now documented in `tooling.md` and `stacks/python-pytest.md`.
-
-#### Task 12 — Airflow DAG halted (`airflow.utils.task_group` not mocked)
-The model imported `from airflow.utils.task_group import TaskGroup`. The conftest
-`_AIRFLOW_MOCKS` list included `airflow.utils` but not `airflow.utils.task_group`. Python
-sees `airflow.utils` as a `MagicMock` object (not a package), so submodule attribute access
-as an import raises `ModuleNotFoundError: No module named 'airflow.utils.task_group';
-'airflow.utils' is not a package`.
-
-The task doc explicitly told the model "`TaskGroup` is mocked in tests" — a broken promise,
-since the conftest never registered that submodule path. The model had no way to fix this
-(the fix is in conftest, not in the implementation file). After 3 reflections aider exited 0
-(false positive), but the runner's independent test verification caught the failure and halted.
-
-**Generic principle**: For any dotted import path `a.b.c` the implementation will use,
-`a`, `a.b`, and `a.b.c` must all be registered separately in `sys.modules`. And the conftest
-must be verified with a bare module import before task docs are generated. Now documented in
-`tooling.md` (universal principle) and `stacks/python-pytest.md` (Python-specific mechanism).
+**Task 12 root cause**: `airflow.utils` registered in sys.modules but not `airflow.utils.task_group`.
+Python sees the parent as a MagicMock object (not a package) — importing a submodule fails.
+Fix: every dotted path prefix must be registered separately. Conftest must be verified with a
+bare import before task docs are generated.
 
 ---
 
@@ -273,200 +180,99 @@ must be verified with a bare module import before task docs are generated. Now d
 **Log**: `run-20260310-105632.log`
 **Context**: 32,768 tokens
 **Model**: Qwen 3 Coder 30B Q4
-**Changes applied before this run** (Trial 6 root causes addressed):
-- Conftest: `airflow.utils.task_group` added to `_AIRFLOW_MOCKS`
-- Conftest: `sqlite_conn` fixture now sets `row_factory = sqlite3.Row`
-- Task 06 (UUIDStore): new test `test_schema_initialized_on_construction` calls `mark_seen()` immediately after `UUIDStore(":memory:")` — directly tests that CREATE TABLE happens in `__init__`
-- Task 12 (DAG): redesigned — `_extract_and_ingest` is now a module-level function (not a closure), directly importable and testable; conftest mock list explicitly enumerated in task doc
-- Tasks 13–17: no fixture changes; rely on `sqlite_conn`
-- `mock_fastavro_writer` fixture removed from conftest; task 04 (MinioWriter) switched to real fastavro roundtrip test with explicit arg-order callout in task doc
-
-**Result**: 9/12 ✅, 3 degraded ⚠️ (tasks 1, 6, 12), halted at task 13 ❌ (tasks 14–18 not run)
+**Result**: 9/12 ✅, 3 degraded ⚠️ (tasks 1, 6, 12), halted at task 13 ❌
 
 | Task | Result | Notes |
 |------|--------|-------|
-| 01 Settings | ⚠️ DEGRADED | Module-level `settings = Settings()` blows up at import — no env vars |
-| 02 BaseRecordExtractor | ✅ | |
-| 03 GoogleDriveClient | ✅ | |
-| 04 MinioWriter | ✅ | Second clean pass; real fastavro roundtrip passed |
-| 05 RabbitmqPublisher | ✅ | |
-| 06 UUIDStore | ⚠️ DEGRADED | Still `no such table: seen_uuids` — multi-connection `:memory:` trap |
-| 07 StepsExtractor | ✅ | |
-| 08 BloodGlucoseExtractor | ✅ | |
-| 09 HeartRateExtractor | ✅ | Third consecutive clean pass |
-| 10 HRVExtractor | ✅ | |
-| 11 SleepExtractor | ✅ | |
-| 12 Airflow DAG | ⚠️ DEGRADED | `_extract_and_ingest` defined as closure, not module-level |
-| 13 ActiveCaloriesExtractor | ❌ HALTED | aider false-positive; `test_dag.py` collection fails |
-| 14–18 | NOT RUN | Blocked by task 13 halt |
+| 01 Settings | ⚠️ | Module-level `settings = Settings()` — ValidationError at import |
+| 02–05 | ✅ | |
+| 06 UUIDStore | ⚠️ | Still `no such table` — multi-connection `:memory:` trap (each connect creates new DB) |
+| 07–11 | ✅ | |
+| 12 Airflow DAG | ⚠️ | `_extract_and_ingest` defined as closure despite task doc specifying module-level |
+| 13 ActiveCaloriesExtractor | ❌ HALTED | Implementation correct but `test_dag.py` broken from task 12 — **cascade** |
+| 14–18 | NOT RUN | Blocked |
 
-#### Task 1 — Settings degraded (module-level instantiation at import)
-The model wrote `settings = Settings()` at module level in `plugins/config/settings.py`.
-`Settings` is a pydantic-settings `BaseSettings` subclass with 7 required fields (no
-defaults). When any other module imports `settings`, the instantiation fires immediately at
-import time — and without the required env vars set, pydantic raises `ValidationError: 7
-validation errors for Settings`.
-
-The test (`test_defaults_applied`) uses `_make_settings()`, which does a deferred
-`import plugins.config.settings as mod` inside the function body — specifically to control
-when the module loads. But the model placed the instantiation at top level, so even a
-deferred import triggers the error. After 3 reflections the model made no progress — it
-understood the error message but did not recognize that the fix was to either (a) make the
-module-level singleton lazy, or (b) not instantiate at module level at all.
-
-**Cascading effect**: Task 12 and task 13 both import `from plugins.config.settings import
-settings`. With the module-level instantiation present, importing the DAG module also blows
-up — contributing to task 12's failure.
-
-#### Task 6 — UUIDStore degraded again (`no such table: seen_uuids`)
-Despite the new `test_schema_initialized_on_construction` test, the model produced a
-`UUIDStore` with `_init_schema()` called from `__init__` — but each method opens a fresh
-`sqlite3.connect(self.db_path)`. For `:memory:` databases, each call to
-`sqlite3.connect(":memory:")` creates a completely independent in-memory database.
-`_init_schema()` creates the table in one instance; `mark_seen()` opens a fresh, empty
-instance — `seen_uuids` does not exist there. The model adjusted `mark_seen()` across 3
-reflections (swapping timestamp queries) without ever diagnosing the multi-connection root
-cause.
-
-#### Task 12 — Airflow DAG degraded (`_extract_and_ingest` not importable)
-Despite the task doc specifying `_extract_and_ingest` as module-level, the model defined it
-as a nested closure inside `create_dag()`. The settings cascade failure from task 1 added a
-second simultaneous error. After 3 reflections partially addressing each, aider exited 0
-(false positive) — runner's independent verification caught it and marked degraded.
-
-#### Task 13 — ActiveCaloriesExtractor halted (test_dag.py collection failure)
-The ActiveCalories implementation itself was correct (aider fixed a `from typing import Any,
-list` error and exited 0). But the runner's full-suite verification included `test_dag.py`,
-which was broken from task 12. Pytest exit 2 (collection error) triggered the false-positive
-halt. All tasks 14–18 blocked.
+**Cascade analysis (task 13)**: ActiveCalories implementation was correct — it was halted
+because its test_command included `test_dag.py`, which was broken from task 12. This is the
+critical structural problem: extractor tasks had inline DAG wiring steps, meaning `test_dag.py`
+was gated in every extractor's command. A single broken DAG task cascades to all downstream
+extractors regardless of their individual correctness.
 
 ---
 
-### Trial Set 8 — Codestral 22B Head-to-Head (2026-03-10, same scaffold as Trial 7)
-**Log**: `run-20260310-112757.log`
-**Context**: N/A (Codestral runs via LM Studio, not MLX — no GPU KV cache constraint)
+### Trial Set 8 — Codestral 22B Head-to-Head (2026-03-10)
 **Model**: Codestral 22B v0.1
-**Setup**: Code reverted to pre-Trial-7 state; same task scaffold (Trial 7 conftest + task docs)
-**Result**: 5/18 ✅, 13 degraded ⚠️, 0 halts ❌
+**Result**: 5/18 ✅, 13 degraded ⚠️, 0 halts
 
-| Task | Qwen T7 | Codestral T8 | Notes |
-|------|---------|--------------|-------|
-| 01 Settings | ⚠️ | ⚠️ | Both: module-level `settings = Settings()` ValidationError |
-| 02 BaseRecordExtractor | ✅ | ✅ | Both clean |
-| 03 GoogleDriveClient | ✅ | ⚠️ | Codestral: `AttributeError: module does not have attribute 'Credentials'` |
-| 04 MinioWriter | ✅ | ⚠️ | Codestral: class named `MinIOWriter` (wrong case); then circular import after rename attempt |
-| 05 RabbitmqPublisher | ✅ | ⚠️ | Codestral: `NotImplementedError` left in `publish()` body |
-| 06 UUIDStore | ⚠️ | ✅ | Codestral solved it; Qwen stuck on multi-connection `:memory:` trap |
-| 07 StepsExtractor | ✅ | ⚠️ | Codestral: `NotImplementedError` left in `_query_rows()` body |
-| 08 BloodGlucoseExtractor | ✅ | ✅ | Both clean |
-| 09 HeartRateExtractor | ✅ | ⚠️ | Codestral: `TypeError: Can't instantiate abstract class ... with abstract methods _query_rows, _to_avro_dict` — didn't override the base class methods |
-| 10 HRVExtractor | ✅ | ✅ | Both clean |
-| 11 SleepExtractor | ✅ | ⚠️ | Codestral: `AttributeError: 'SleepExtractor' object has no attribute '_sessions'` |
-| 12 Airflow DAG | ⚠️ | ⚠️ | Codestral: circular import (`DAG_ID` not importable); settings cascade also present |
-| 13 ActiveCaloriesExtractor | ❌ HALT | ⚠️ | Codestral degraded but continued (no halt — aider exited non-zero) |
-| 14 DistanceExtractor | NOT RUN | ⚠️ | Codestral degraded; `test_dag.py` collection failure cascade |
-| 15 TotalCaloriesExtractor | NOT RUN | ✅ | Codestral passed despite `test_dag.py` cascade — unclear why |
-| 16 O2SatExtractor | NOT RUN | ⚠️ | Codestral edited `test_dag.py` directly to fix EXTRACTORS count |
-| 17 ExerciseSessionExtractor | NOT RUN | ⚠️ | Same |
-| 18 Docker | NOT RUN | ⚠️ | `test_dag.py` assertion failure `assert 1 == 10` after Codestral corrupted test file |
+**Codestral-specific failure modes:**
+- Leaves `raise NotImplementedError` in method bodies (partial implementation)
+- Class naming inconsistency: `MinIOWriter` vs expected `MinioWriter`
+- **Edits test files when stuck** — corrupted `test_dag.py` to `assert 1 == 10` by task 18
 
-#### Codestral-specific failures
-
-**`NotImplementedError` left in stubs**: Codestral partially implements methods and leaves
-placeholders. Qwen either implements fully or produces wrong logic — but does not leave stubs.
-
-**Class naming inconsistency (task 4)**: Codestral named the class `MinIOWriter` despite the
-test importing `MinioWriter`. When it noticed, it tried to fix the test import instead of the
-class name, then introduced a circular import.
-
-**`test_dag.py` test file corruption (tasks 16–18)**: Codestral began editing `test_dag.py`
-directly to work around the `EXTRACTORS` count mismatch, eventually producing `assert 1 == 10`.
-Qwen never touched test files. **This is the most serious Codestral failure mode**: it
-defeats the purpose of the TDD approach.
+**Where Codestral beats Qwen**: Task 6 (UUIDStore) — used persistent `self._conn` correctly.
+**Where Qwen beats Codestral**: Tasks 3, 4, 5, 7, 9, 11 — better naming discipline, no stubs left.
 
 ---
 
 ### Trial Set 9 — Gemini 2.0 Flash Lite Head-to-Head (2026-03-10 afternoon)
-**Log**: `run-20260310-141653.log`
-**Model**: `gemini/gemini-2.0-flash-lite-preview` (via Gemini API, not LM Studio)
-**Setup**: Code reverted to clean state; same task scaffold (Trial 7 conftest + task docs)
-**Result**: 12/13 ✅, 1 degraded ⚠️ (task 13), halted at task 14 ❌ (tasks 15–18 not run)
+**Model**: `gemini/gemini-2.0-flash-lite-preview` (Gemini API)
+**Result**: 12/13 ✅, 1 degraded ⚠️ (task 13), halted at task 14 ❌
 
 | Task | Qwen T7 | Codestral T8 | Gemini T9 | Notes |
 |------|---------|--------------|-----------|-------|
-| 01 Settings | ⚠️ | ⚠️ | ✅ | Gemini: first model to solve lazy init autonomously |
-| 02 BaseRecordExtractor | ✅ | ✅ | ✅ | All clean |
-| 03 GoogleDriveClient | ✅ | ⚠️ | ✅ | |
-| 04 MinioWriter | ✅ | ⚠️ | ✅ | Gemini: correct fastavro args first try |
-| 05 RabbitmqPublisher | ✅ | ⚠️ | ✅ | |
-| 06 UUIDStore | ⚠️ | ✅ | ✅ | Gemini: used `self._conn` persistent connection |
-| 07 StepsExtractor | ✅ | ⚠️ | ✅ | |
-| 08 BloodGlucoseExtractor | ✅ | ✅ | ✅ | All clean |
-| 09 HeartRateExtractor | ✅ | ⚠️ | ✅ | Gemini: followed override pattern correctly |
-| 10 HRVExtractor | ✅ | ✅ | ✅ | All clean |
-| 11 SleepExtractor | ✅ | ⚠️ | ✅ | |
-| 12 Airflow DAG | ⚠️ | ⚠️ | ✅ | Gemini: first model to pass task 12 |
-| 13 ActiveCaloriesExtractor | ❌ HALT | ⚠️ | ⚠️ DEGRADED | Gemini: hallucinated `sleep_session_extractor` import in DAG |
-| 14 DistanceExtractor | NOT RUN | ⚠️ | ❌ HALTED | Gemini: aider exited 0 with broken test_dag.py; false-positive halt |
-| 15–18 | NOT RUN | ⚠️/✅ | NOT RUN | Blocked by task 14 halt |
+| 01 Settings | ⚠️ | ⚠️ | ✅ | Gemini: LazySettings proxy with @cached_property, self-diagnosed |
+| 02–05 | ✅ | mixed | ✅ | |
+| 06 UUIDStore | ⚠️ | ✅ | ✅ | Gemini: self._conn persistent connection |
+| 07–11 | ✅ | mixed | ✅ | |
+| 12 Airflow DAG | ⚠️ | ⚠️ | ✅ | Gemini: first model to pass — but added hallucinated import |
+| 13 ActiveCaloriesExtractor | ❌ | ⚠️ | ⚠️ | Gemini: correct impl; cascaded from hallucinated DAG import |
+| 14–18 | NOT RUN | mixed | NOT RUN | |
 
-#### Task 1 — Gemini solved lazy init autonomously
-On the first reflection Gemini replaced the module-level singleton with a `LazySettings`
-proxy using `@cached_property`. All 5 tests passed. Neither Qwen nor Codestral ever arrived
-at this solution across multiple trials.
+**Task 12 — Gemini passed but hallucinated**: Added `from plugins.extractors.sleep_session_extractor
+import SleepSessionExtractor` — a module that doesn't exist. Task 12's test suite passed
+(count was 5 including the hallucinated class). Surfaced at task 13 full-suite collection.
 
-#### Task 12 — Gemini passed; hallucination introduced
-First model to pass. Correctly defined `_extract_and_ingest` at module level and wired
-`python_callable` correctly. However, added a non-existent import:
-`from plugins.extractors.sleep_session_extractor import SleepSessionExtractor` — a module
-that was never scaffolded. The bad import wasn't caught by task 12's tests (the EXTRACTORS
-count test passed since 5 extractors were registered). It surfaced at task 13 when
-full-suite collection tried to import the DAG module.
-
-**This is a hallucination failure**: Gemini interpolated that a `SleepSessionExtractor`
-should exist alongside `SleepExtractor`. Fix: the DAG wiring task must enumerate exact
-extractor class names with an explicit prohibition against importing anything not listed.
+**Root cause of all T6-T9 cascades**: Every extractor task had an inline `Modify: dags/...`
+step and `test_dag.py` in its `test_command`. When the DAG task degraded, all downstream
+extractors failed their gates regardless of their own correctness. This is a structural plan
+problem, not a model capability problem.
 
 ---
 
-## Model Comparison Summary (Trials 6–9, TDD strategy)
+## Model Comparison Summary (Trials 6–9)
 
 | Capability | Qwen 30B Q4 | Codestral 22B | Gemini Flash Lite |
 |------------|-------------|---------------|-------------------|
-| Follows ABC override instructions | ✅ (T6+) | ❌ | ✅ |
-| Implements methods completely (no leftover stubs) | ✅ | ⚠️ | ✅ |
+| Follows ABC override instructions | ✅ | ❌ | ✅ |
+| Implements methods completely | ✅ | ⚠️ (leaves stubs) | ✅ |
 | Class naming discipline | ✅ | ⚠️ | ✅ |
-| SQLite `:memory:` single-connection pattern | ❌ (2 failures) | ✅ | ✅ |
-| Module-level `settings = Settings()` trap | ❌ | ❌ | ✅ (self-diagnoses + fixes) |
-| Solves lazy settings proxy pattern autonomously | ❌ | ❌ | ✅ |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ |
+| Settings lazy init trap | ❌ | ❌ | ✅ (self-diagnoses) |
 | Solves Airflow DAG task 12 | ❌ | ❌ | ✅ |
-| Hallucinates module names in wiring code | ❌ | ❌ | ⚠️ (sleep_session_extractor) |
-| Respects test file boundary (never edits tests) | ✅ | ❌ | ✅ |
-| False-positive exit codes (aider exits 0 on failure) | ⚠️ | ✅ | ⚠️ |
-| Cascade containment | ⚠️ (halts) | ❌ (corrupts) | ⚠️ (halts) |
+| Hallucinates module names | ❌ | ❌ | ⚠️ |
+| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ |
 
 **Overall TDD pass rate**: Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/18
 
-Gemini Flash Lite is the strongest performer — 12 consecutive passes including tasks 1 and 12
-(which blocked all other models). Its failure was a hallucination (correctable with explicit
-enumeration), not a reasoning failure.
+Gemini Flash Lite is the strongest performer. Its hallucination failure is correctable with
+explicit extractor enumeration in the DAG wiring task.
 
 ---
 
 ## Open Issues
 
-1. **Settings — module-level instantiation (Qwen + Codestral)**: Both local models write
-   `settings = Settings()` at module top-level. Task doc must forbid this and pre-provide a
-   `LazySettings` skeleton. Gemini solved it autonomously — can't rely on that for local models.
+1. **Settings — module-level instantiation (Qwen + Codestral)**: Pre-provide a `LazySettings`
+   skeleton in the task doc. Gemini solved it autonomously — local models need it spelled out.
 
-2. **UUIDStore — multi-connection `:memory:` trap (Qwen only)**: Task doc must explicitly
-   mandate a persistent `self._conn` connection held for the object's lifetime.
+2. **UUIDStore — multi-connection `:memory:` trap (Qwen)**: Task doc must mandate `self._conn`
+   persistent connection.
 
-3. **DAG wiring hallucination (Gemini)**: Task 12 doc must enumerate exact extractor classes
-   with: "Do not import any extractor class not listed here."
+3. **DAG wiring hallucination (Gemini)**: Wiring task must enumerate exact class names with:
+   "Do not import any class not listed here."
 
-4. **Cascade from test_dag.py**: Any broken DAG blocks tasks 13–18. Structurally correct
-   runner behavior — DAG task must be clean before second half can run.
+4. **Cascade structure — RESOLVED in plan format**: Extractor tasks must never inline DAG
+   modifications. All wiring is deferred to a dedicated wiring task after all components
+   complete. This is now codified in `plan-format.md` and `writing-guide.md` (2026-03-10).
 
 5. **Codestral test file corruption**: Runner should detect edits to `tests/` files and halt.
 
@@ -482,17 +288,19 @@ enumeration), not a reasoning failure.
 |------|------|--------|
 | 2026-03-03 | `run-tasks-template.sh` | Added `--timeout 600` to aider invocation |
 | 2026-03-03 | `references/writing-guide.md` | Added ABC call site rule |
-| 2026-03-04 | `SKILL.md` | Added Step 0: prohibit `git checkout HEAD` restoration of stale artifacts |
-| 2026-03-04 | `SKILL.md` Step 7 | Added: do not restore `run-tasks.sh` from git, always copy from template |
-| 2026-03-04 | `run-tasks-template.sh` | Reverted `timeout` shell wrapper; kept `--timeout` aider flag |
-| 2026-03-08 | `references/plan-format.md` | Added ABC contract fit verification guidance; `extract()`-level override pattern |
-| 2026-03-08 | `references/tooling.md` | Added positional argument trap fixture criterion; `mock_fastavro_writer` example |
-| 2026-03-08 | `run-tasks-template.sh` | Corrected `--timeout` comment (caps HTTP setup only, not streaming) |
-| 2026-03-09 | `references/tooling.md` | Added dotted mock path registration rule; persistence class stub rule |
-| 2026-03-10 | `references/tooling.md` | **Refactor**: removed Python-specific content; added stacks/ table; language-neutral principles only |
-| 2026-03-10 | `references/writing-guide.md` | **Refactor**: removed Python-specific stub examples; language-neutral patterns only |
-| 2026-03-10 | `implementation-planning/references/plan-format.md` | **Refactor**: replaced Python syntax in interface blocks with language-neutral pseudocode |
-| 2026-03-10 | `SKILL.md` | **Refactor**: Steps 2/3/3b generalized; Bundled Resources updated to reference stacks/ |
-| 2026-03-10 | `references/stacks/python-pytest.md` | **New**: all Python-specific content (uv/pip/poetry, ruff wrapper, sys.modules, fixtures, mutmut, SQLite trap) |
-| 2026-03-10 | `references/stacks/typescript-jest.md` | **New**: TypeScript/Jest stack stub |
-| 2026-03-10 | `references/stacks/kotlin-junit.md` | **New**: Kotlin/JUnit/Gradle stack stub |
+| 2026-03-04 | `SKILL.md` | Added Step 0: prohibit `git checkout HEAD` restoration |
+| 2026-03-04 | `SKILL.md` Step 7 | Always copy runner from template, not git |
+| 2026-03-04 | `run-tasks-template.sh` | Reverted `timeout` shell wrapper; kept `--timeout` flag |
+| 2026-03-08 | `references/plan-format.md` | ABC contract fit verification; extract()-level override pattern |
+| 2026-03-08 | `references/tooling.md` | Positional argument trap fixture criterion; mock_fastavro_writer |
+| 2026-03-08 | `run-tasks-template.sh` | Corrected `--timeout` comment |
+| 2026-03-09 | `references/tooling.md` | Dotted mock path registration rule; persistence class stub rule |
+| 2026-03-10 | `references/tooling.md` | Refactor: language-neutral; stacks/ table |
+| 2026-03-10 | `references/writing-guide.md` | Refactor: language-neutral stub patterns |
+| 2026-03-10 | `implementation-planning/references/plan-format.md` | Refactor: language-neutral interface examples |
+| 2026-03-10 | `SKILL.md` | Refactor: Steps 2/3/3b generalized; stacks/ in Bundled Resources |
+| 2026-03-10 | `references/stacks/python-pytest.md` | New: all Python-specific content |
+| 2026-03-10 | `references/stacks/typescript-jest.md` | New: TypeScript/Jest stub |
+| 2026-03-10 | `references/stacks/kotlin-junit.md` | New: Kotlin/JUnit/Gradle stub |
+| 2026-03-10 | `implementation-planning/references/plan-format.md` | **Fix**: component tasks never modify shared files; wiring is always a separate deferred phase; removed inline Wiring section from task template; phasing guidelines rewritten |
+| 2026-03-10 | `references/writing-guide.md` | **Fix**: replaced Test Scope Rule workaround with structural component/wiring task separation; Deferred Tasks section updated to make wiring tasks the primary example |
