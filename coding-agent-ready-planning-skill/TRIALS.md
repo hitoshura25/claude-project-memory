@@ -178,17 +178,8 @@ summarizer unexpectedly failed for all models
 ```
 
 This "cannot schedule new futures after shutdown" message appeared after every task — but
-these are fast failures (summarizer gives up immediately). The real hang occurred during
-task 9's actual implementation attempts. HeartRateExtractor is structurally different from
-other extractors: it requires a JOIN across two tables (parent session + series rows) and
-the model must aggregate multiple rows into a single Avro record with a `samples` list —
-the base class `_to_avro_dict` contract (one row in → one dict out) doesn't fit. The model
-got stuck in a reflection spiral trying to reconcile this mismatch, generating very long
-outputs indefinitely. The `--timeout` flag had no effect because streaming was active.
-
-**Note**: The `.task-output-18.tmp` file confirms task 18 was written — the run did reach
-the last task. The hang was on a mid-run task that eventually got stuck, not on the final
-task. The script's sequential nature means the hang blocks indefinitely at task 9.
+these are fast failures (summarizer gives up immediately). The real spiral came from the
+model's reflection loop during task 9 itself.
 
 #### MinioWriter — fastavro degradation (same as prior runs)
 The model attempted three strategies in sequence:
@@ -196,119 +187,147 @@ The model attempted three strategies in sequence:
 2. `fastavro.writer(avro_buffer, records, None)` → KeyError: 'type' (None is not a valid schema)
 3. Back to 2 args → same TypeError
 
-The model was stuck cycling through wrong approaches. It never tried the correct
-`fastavro.writer(fo, schema, records)` signature. The test mocks the S3 client so the
-fastavro call is exercised for real — the test requires either a real schema dict or for the
-test to mock fastavro. The model has no knowledge of the correct arg order.
-
 **Current state of minio_writer.py**: Has `fastavro.writer(avro_buffer, records, None)` —
 still wrong. Tests are failing.
 
 #### HeartRateExtractor — fundamental contract mismatch
-The model correctly recognized the mismatch between the base class contract and what
-HeartRateExtractor needs, but couldn't solve it. Its attempted `_to_avro_dict`
-implementation tried to iterate over `row` as if it were a list of rows — but the base
-class passes a single `sqlite3.Row` object. The error:
-```
-TypeError: byte indices must be integers or slices, not str
-```
-The model was iterating over the bytes of the UUID field, treating it as a sequence.
-
 **Root cause**: HeartRateExtractor needs to override `extract()` entirely (doing its own
 GROUP BY aggregation in the query and accumulating samples in a loop), not just
 `_to_avro_dict`. The base class template is the wrong abstraction for multi-row-per-record
-cases. This needs a task-level note or a dedicated override pattern in the task spec.
-
-#### Summarizer behavior change
-Unlike Trial Set 2 where the summarizer ran for 25,000+ tokens before stalling, in this run
-the summarizer failed fast ("cannot schedule new futures after shutdown") after every task.
-This is a different failure mode — the executor was likely already shut down from a previous
-aider invocation. The fast failure is actually harmless (context just grows without
-compression). The real spiral came from the model's reflection loop during task 9 itself.
+cases.
 
 ---
 
-## Generated Code Quality Assessment (updated 2026-03-04 after Trial Set 5)
+### Trial Set 6 — Skill Updates Applied (2026-03-09)
+**Log**: `run-20260309-123229.log`
+**Context**: 32,768 tokens
+**Model**: Qwen 3 Coder 30B Q4
+**Changes applied before this run**:
+- `plan-format.md`: ABC contract fit verification guidance (verify base class calling convention before writing interface; document `extract()`-level override pattern for multi-row-per-record cases)
+- `tooling.md`: Positional argument trap fixture criterion + `mock_fastavro_writer` fixture example
+- `run-tasks-template.sh`: Corrected `--timeout` comment (caps HTTP setup only, not streaming)
+- New conftest fixture: `mock_fastavro_writer` patches `fastavro.writer`, captures `(schema, records)`, writes `b"AVRO_MOCK_BYTES"` to `fo`
+- Task 09 (HeartRateExtractor): respecified to override `extract()` directly with explicit callout that `_to_avro_dict` is NOT used
 
-### Infrastructure — Good
-- `UUIDStore`: correct (schema, INSERT OR IGNORE, connection lifecycle)
-- `GoogleDriveClient`: correct (streaming download loop, right error types)
-- `RabbitmqPublisher`: mostly correct (hardcoded timestamp placeholder minor issue)
-- `Settings`: correct (pydantic v2, env_prefix, extra="ignore")
+**Result**: 11/18 ✅, 1 degraded ⚠️ (task 6), halted at task 12 ❌
 
-### Extractors — Inconsistent
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | |
+| 02 BaseRecordExtractor | ✅ | |
+| 03 GoogleDriveClient | ✅ | |
+| 04 MinioWriter | ✅ | Fixed — `mock_fastavro_writer` fixture worked |
+| 05 RabbitmqPublisher | ✅ | |
+| 06 UUIDStore | ⚠️ DEGRADED | `no such table: seen_uuids` — `__init__` didn't call CREATE TABLE |
+| 07 StepsExtractor | ✅ | |
+| 08 BloodGlucoseExtractor | ✅ | |
+| 09 HeartRateExtractor | ✅ | Fixed — override pattern worked, no hang |
+| 10 HRVExtractor | ✅ | |
+| 11 SleepExtractor | ✅ | |
+| 12 Airflow DAG | ❌ HALTED | `airflow.utils.task_group` not in conftest mock list |
+| 13–18 | NOT RUN | Blocked by task 12 halt |
 
-| Extractor | Status | Issue |
+#### Notable wins
+- **MinioWriter (task 4)**: First clean pass in any trial. The `mock_fastavro_writer` fixture completely bypassed the arg-order trap. The skill fix worked exactly as intended.
+- **HeartRateExtractor (task 9)**: Passed cleanly with no hang. The ABC override pattern in `plan-format.md` + the explicit task-level callout prevented the reflection spiral that had blocked every prior run.
+
+#### Task 6 — UUIDStore degraded (`no such table: seen_uuids`)
+The model implemented `mark_seen()` correctly — SQL, `INSERT OR IGNORE`, `executemany` all
+correct. But `__init__` did not call the table creation step before returning. The error is
+immediate: the test fixture creates `UUIDStore(":memory:")` and calls `mark_seen()` directly,
+so the table must exist after `__init__` completes. After 3 reflections the model didn't add
+the missing call.
+
+**Root cause**: The mutation gate stub for UUIDStore was not testing for missing schema
+initialization. A stub with `__init__: pass` would have failed the first `mark_seen` call
+and flagged this as a required assertion — but if the stub already had the CREATE TABLE call,
+the gate couldn't detect this class of omission.
+
+**Generic principle**: For persistence classes, the mutation gate stub must deliberately omit
+schema initialization. This is now documented in `tooling.md`.
+
+#### Task 12 — Airflow DAG halted (`airflow.utils.task_group` not mocked)
+The model imported `from airflow.utils.task_group import TaskGroup`. The conftest
+`_AIRFLOW_MOCKS` list included `airflow.utils` but not `airflow.utils.task_group`. Python
+sees `airflow.utils` as a `MagicMock` object (not a package), so submodule attribute access
+as an import raises `ModuleNotFoundError: No module named 'airflow.utils.task_group';
+'airflow.utils' is not a package`.
+
+The task doc explicitly told the model "`TaskGroup` is mocked in tests" — a broken promise,
+since the conftest never registered that submodule path. The model had no way to fix this
+(the fix is in conftest, not in the implementation file). After 3 reflections aider exited 0
+(false positive), but the runner's independent test verification caught the failure and halted.
+
+**Why halted (not degraded)**: The runner marks a task degraded when aider exhausts
+reflections and exits non-zero. Here aider exited 0 — it thought it succeeded. The runner's
+independent pytest verification caught the mismatch and halted with instructions to fix and
+re-run from task 12. This is the correct behavior: a false-positive success is more dangerous
+than a known failure, so the runner stops rather than propagating a broken module.
+
+**Generic principle**: For any dotted import path `a.b.c` the implementation will use,
+`a`, `a.b`, and `a.b.c` must all be registered separately in `sys.modules`. And the conftest
+must be verified with a bare module import before task docs are generated. This is now
+documented in `tooling.md`.
+
+---
+
+## Generated Code Quality Assessment (updated 2026-03-09 after Trial Set 6)
+
+### Infrastructure
+
+| Component | Status | Notes |
 |-----------|--------|-------|
-| StepsExtractor | OK | Correct if/else for empty seen set |
-| BloodGlucoseExtractor | OK | Correct mmol conversion and null guards |
-| HRVExtractor | Fragile | Builds `NOT IN ()` before checking empty set; SQLite accepts it accidentally |
-| ActiveCaloriesExtractor | Fragile | Same empty-set issue as HRV |
-| DistanceExtractor | OK (Trial 5) | Fixed; bytes.fromhex() dedup now correct |
-| ExerciseSessionExtractor | OK (Trial 5) | Correctly uses bytes.fromhex() BLOB comparison |
-| SleepExtractor | Fragile | row_factory assumption (uses row["key"] access) |
-| HeartRateExtractor | Stuck/Crash | Model cannot solve JOIN aggregation within base class contract; needs override pattern |
+| Settings | ✅ | pydantic v2, env_prefix, extra="ignore" |
+| BaseRecordExtractor | ✅ | |
+| GoogleDriveClient | ✅ | streaming download loop, correct error types |
+| MinioWriter | ✅ | fixed in Trial 6 via mock_fastavro_writer fixture |
+| RabbitmqPublisher | ✅ | minor: hardcoded timestamp placeholder |
+| UUIDStore | ⚠️ | missing CREATE TABLE in __init__; needs re-run |
 
-### MinioWriter — Broken (fastavro arg order)
-Current state: `fastavro.writer(avro_buffer, records, None)` — wrong. Correct is
-`fastavro.writer(fo, schema, records)`. Recurring failure across all models and all trials.
-The model has no knowledge of the correct signature and cycles through wrong guesses.
+### Extractors
 
-### DAG — Multiple Call-Site Bugs (unchanged from prior assessment)
-1. `RabbitmqPublisher(rabbitmq_host, rabbitmq_port, ...)` — wrong constructor signature
-2. `download_file_by_name(file_name, zip_path)` — ignores return value
-3. Missing extractors from `EXTRACTORS` list
-4. `TaskGroup.add()` invalid
+| Extractor | Status | Notes |
+|-----------|--------|-------|
+| StepsExtractor | ✅ | |
+| BloodGlucoseExtractor | ✅ | |
+| HeartRateExtractor | ✅ | fixed in Trial 6 via override pattern |
+| HRVExtractor | ✅ | |
+| SleepExtractor | ✅ | row_factory assumption may be fragile |
+| ActiveCalories, Distance, TotalCalories, O2Sat, ExerciseSession | NOT RUN | blocked by task 12 halt |
 
-### BaseRecordExtractor — Duplicate lines in extract() body
-The model wrote the inner loop body twice (lines duplicated):
-```python
-avro_dict = self._to_avro_dict(row)
-if avro_dict is not None:
-avro_dict = self._to_avro_dict(row)   # ← duplicate
-if avro_dict is not None:              # ← duplicate
-```
-Ruff autocorrected the indentation error. Tests pass because the duplicate is harmless
-at runtime, but it's a sign of garbled output in the diff application.
+### DAG — blocked
+Task 12 halted at import. Tasks 13–18 did not run.
 
 ---
 
 ## Open Issues
 
-1. **Summarizer spiral / hang**: `--timeout` doesn't work with streaming. The spiral now
-   occurs mid-run on the HeartRateExtractor task (task 9) rather than only at end-of-run.
-   The summarizer itself fails fast ("cannot schedule new futures after shutdown") — the
-   hang is from the model's own reflection loop, not the summarizer.
-   - Real fix: `stream: false` in aider config, or server-side `max_tokens` cap in LM Studio.
-   - Workaround: HeartRateExtractor needs a different task design (see issue 4).
+1. **UUIDStore — missing schema init**: `__init__` doesn't call CREATE TABLE. One-line fix.
+   Re-run with `--start 6`.
 
-2. **Context length — do not reduce below 32k**: Smaller context pre-allocates a smaller MLX
+2. **Airflow DAG — conftest mock gap**: `airflow.utils.task_group` missing from `_AIRFLOW_MOCKS`.
+   Add it to conftest, then re-run with `--start 12`. Also audit for any other submodule paths
+   the DAG uses (e.g. `airflow.utils.task_group` was added by the model spontaneously — scan
+   the generated DAG file for all `from airflow.*` imports and cross-check against the mock list).
+
+3. **Tasks 13–18 not run**: Once task 12 is fixed, re-run from task 12 to complete the set.
+
+4. **Summarizer spiral / hang**: `--timeout` doesn't work with streaming. No longer hanging
+   (HeartRateExtractor fix eliminated the main spiral source) but the fast summarizer failures
+   ("cannot schedule new futures after shutdown") still appear after each task. Harmless but noisy.
+   Real fix: `stream: false` in aider config, or server-side `max_tokens` cap in LM Studio.
+
+5. **Context length — do not reduce below 32k**: Smaller context pre-allocates a smaller MLX
    KV cache. Hard tasks with many reflections hit the ceiling mid-generation and segfault the
-   model process entirely (worse than a spiral). See Trial Set 4.
+   model process entirely. See Trial Set 4.
 
-3. **fastavro arg order**: Recurring across ALL models and ALL trials. The model has no
-   knowledge of the correct `fastavro.writer(fo, schema, records)` signature and will always
-   get it wrong. Must be added as an explicit example with correct call in `writing-guide.md`,
-   OR the test should mock fastavro so the model never calls it for real.
+6. **row_factory assumption**: SleepExtractor uses `row["key"]` access. Needs `conn.row_factory
+   = sqlite3.Row` set in `base.extract()` or enforced across all extractors.
 
-4. **HeartRateExtractor — base class contract mismatch**: This extractor needs to JOIN two
-   tables and aggregate multiple rows into one Avro record (one session = one record with N
-   samples). The base class `_to_avro_dict(row)` contract (one row → one dict) doesn't fit.
-   The model spirals trying to resolve this. Fix options:
-   - Add an override pattern to `writing-guide.md` showing how to override `extract()` directly
-     for multi-row-per-record extractors, bypassing `_to_avro_dict`.
-   - Alternatively, redesign the task to do the GROUP BY aggregation in SQL and return one
-     row per session (using JSON aggregation or a subquery), so `_to_avro_dict` receives a
-     pre-aggregated row.
-
-5. **row_factory assumption**: SleepExtractor uses `row["key"]` access which requires
-   `conn.row_factory = sqlite3.Row`. Fix: set `row_factory` in `base.extract()` or enforce
-   positional index access in `_to_avro_dict` across all extractors.
-
-6. **DAG wiring split**: DAG task (12) ran before extractors 13-17 existed. Consider
-   splitting into structure task (early) + wiring task (deferred, after all components exist).
-
-7. **UUID dedup**: Add canonical dedup example to `writing-guide.md`.
+7. **DAG wiring — tasks 13-17 extractors missing**: The DAG was assembled before extractors
+   13-17 (ActiveCalories, Distance, etc.) existed. `EXTRACTORS` list only has 5 entries; the
+   remaining extractors need to be wired in as a follow-up or the DAG task needs to be
+   deferred until after all extractors exist.
 
 ---
 
@@ -321,3 +340,8 @@ at runtime, but it's a sign of garbled output in the diff application.
 | 2026-03-04 | `SKILL.md` | Added Step 0: prohibit `git checkout HEAD` restoration of stale artifacts |
 | 2026-03-04 | `SKILL.md` Step 7 | Added: do not restore `run-tasks.sh` from git, always copy from template |
 | 2026-03-04 | `run-tasks-template.sh` | Reverted `timeout` shell wrapper; kept `--timeout` aider flag |
+| 2026-03-08 | `references/plan-format.md` | Added ABC contract fit verification guidance; `extract()`-level override pattern for multi-row-per-record extractors |
+| 2026-03-08 | `references/tooling.md` | Added positional argument trap fixture criterion; `mock_fastavro_writer` example |
+| 2026-03-08 | `run-tasks-template.sh` | Corrected `--timeout` comment (caps HTTP setup only, not streaming generation) |
+| 2026-03-09 | `references/tooling.md` | Added "Mocking Framework Modules" subsection: every dotted import path must be registered separately in sys.modules; verification step via bare module import before task doc generation |
+| 2026-03-09 | `references/tooling.md` | Added persistence class note to "Verifying Fixtures": mutation gate stub must omit schema initialization so tests catch missing CREATE TABLE |
