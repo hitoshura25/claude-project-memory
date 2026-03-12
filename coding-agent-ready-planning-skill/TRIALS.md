@@ -358,8 +358,7 @@ in the schema. Did not attempt the multi-column IN constructor that broke Qwen T
 **ExerciseSession test file E501 — self-corrected**: Task 16 encountered the same pre-written
 test file E501 that caused a lint-only degradation warning in T10 and T11. Gemini fixed it
 by splitting the `CREATE TABLE` string literal across three lines and wrapping the INSERT call
-— all while keeping the test semantics intact. This resolves open issue #2 (though Claude Code
-should still author the test file correctly to avoid the situation).
+— all while keeping the test semantics intact.
 
 **Override tasks (HeartRate, Sleep) — clean in 2 reflections each**: Correctly overrode
 `extract()` directly, left `_row_to_record()` raising `NotImplementedError` as required.
@@ -397,26 +396,18 @@ Gemini 3.1 Flash Lite is the clear winner and the reference model going forward 
 
 ## Open Issues
 
-1. **ExerciseSessionExtractor test file — E501 lint**: ~~Pre-written test file has `CREATE TABLE`
-   string literal > 88 chars.~~ **Mitigated in T12** — Gemini self-corrected. Claude Code should
-   still author test files with properly wrapped string literals to avoid the situation entirely.
+1. **DAG wiring task (deferred)**: The DAG wiring task (`18-task-6.1-wire-dag.md`) has not yet
+   been generated or run. The codebase is in a clean state (89 tests passing) to generate and
+   run it now. When generating: read each extractor source file to get the actual class name and
+   import path; enumerate every class explicitly; include "Do not import any class not listed
+   here" to prevent the hallucinated-import failure seen in Gemini T9.
 
-2. **DAG wiring task (deferred)**: The DAG wiring task (`18-task-6.1-wire-dag.md`) has not yet
-   been generated or run. Gemini T9's hallucination failure (importing a non-existent
-   `sleep_session_extractor` module) suggests the wiring task doc should enumerate exact class
-   names and include "Do not import any class not listed here." The full-suite 89-test pass in
-   T12 means the codebase is in a clean state to generate and run the wiring task now.
-
-3. **UUIDStore SQL pattern — task doc update still recommended**: Gemini solved it without a
-   hint, but Qwen failed here in T10. The correct pattern should be documented in the task doc
-   Behavior section so Qwen-class models also pass reliably.
-
-4. **Codestral — disqualified**: Confirmed across T8 and T11. Test file corruption is a
+2. **Codestral — disqualified**: Confirmed across T8 and T11. Test file corruption is a
    consistent model-level behaviour. No further trials planned.
 
-5. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
+3. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
 
-6. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
+4. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
 
 ---
 
@@ -445,3 +436,5 @@ Gemini 3.1 Flash Lite is the clear winner and the reference model going forward 
 | 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example |
 | 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation |
 | 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects in interface contracts |
+| 2026-03-12 | `references/writing-guide.md` | **Fix**: Two-Layer Validation Gate → Three-Layer; added Layer 0 (lint gate): run linter against pre-written test files before embedding; must return zero errors before proceeding. Updated Deferred Tasks section to clarify the runner pause is a generation step, not a failure, and added "Do not import any class not listed here" guidance for wiring task docs |
+| 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: expanded Persistence Class Stubs into two sections; added "SQLite Trap Patterns" with Trap 1 (`:memory:` multi-connection) and Trap 2 (multi-column IN clause); both include task doc Behavior entry wording for Claude Code to copy when writing task docs |
