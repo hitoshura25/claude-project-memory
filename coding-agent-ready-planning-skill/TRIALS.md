@@ -256,99 +256,145 @@ problem, not a model capability problem.
 | 06 RabbitMQPublisher | ✅ | |
 | 07–11 | ✅ | All 5 extractors (Steps, BloodGlucose, HeartRate, HRV, Sleep) |
 | 12–15 | ✅ | All 4 secondary extractors (ActiveCalories, Distance, TotalCalories, OxygenSaturation) |
-| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; aider exhausted reflections on lint-only issue (E501 line too long in test file) |
-| 17 Docker | ⚠️ DEGRADED | No test_command — degraded due to UUIDStore full-suite leak (see below) |
+| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; aider exhausted reflections on E501 lint in pre-written test file |
+| 17 Docker | ⚠️ DEGRADED | No test_command — degraded due to UUIDStore full-suite leak |
 
 **Cascade isolation confirmed**: Tasks 07–16 all passed with `test_command` scoped to their
-own test files only. UUIDStore's broken state did NOT cascade to any extractor. The
-component/wiring separation fix worked exactly as intended.
+own test files only. UUIDStore's broken state did NOT cascade to any extractor.
 
-**Settings fix confirmed**: Task 01 passed on first attempt with no module-level instantiation
-issue. The `plan-format.md` fix (do not include module-level singleton in interface contracts)
-propagated correctly through the regenerated plan and task doc.
+**Settings fix confirmed**: Task 01 passed on first attempt with no module-level instantiation.
 
-**HeartRate and Sleep extractors (tasks 09, 11)**: Both passed — the override pattern (`extract()` 
-directly, `_row_to_record()` raises NotImplementedError) was correctly followed.
-
----
-
-#### Task 02 — UUIDStore Degraded: New SQL Bug
+#### Task 02 — UUIDStore: SQLite Multi-Column IN Clause
 
 **Error**: `sqlite3.OperationalError: IN(...) element has 1 term - expected 2`
 
-**Root cause**: Model used a row-value constructor in the SQL IN clause — `WHERE (uuid_hex, record_type) IN (?, ?, ?, ?)` — which SQLite does not support. SQLite's `IN` clause requires single-value terms: `WHERE col IN (?, ?, ?)`. The model attempted this approach across all 3 reflection loops, never escaping it.
+**Root cause**: Model used `WHERE (uuid_hex, record_type) IN (?, ?, ?, ?)` — a multi-column
+row-value constructor that SQLite does not support. All 3 reflections tried variations of the
+same flattened-params approach; none escaped the pattern.
 
-**Model's attempted fix**: Flattened params as `[uuid1, record_type, uuid2, record_type, ...]` — correct for the tuple syntax in other databases, but SQLite rejected the multi-column IN construct regardless of parameter binding.
-
-**Correct implementation**: Filter by `uuid_hex` only (since `record_type` is also passed, use `AND record_type = ?` in a separate clause), or use a simpler loop/set approach:
+**Correct approach**: Single-column IN with `AND record_type = ?`:
 ```python
-def filter_new(self, uuids, record_type):
-    if not uuids:
-        return []
-    placeholders = ','.join('?' * len(uuids))
-    query = f"SELECT uuid_hex FROM seen_uuids WHERE uuid_hex IN ({placeholders}) AND record_type = ?"
-    cursor = self._conn.execute(query, [*uuids, record_type])
-    seen = {row[0] for row in cursor.fetchall()}
-    return [u for u in uuids if u not in seen]
+placeholders = ','.join('?' * len(uuids))
+query = f"SELECT uuid_hex FROM seen_uuids WHERE uuid_hex IN ({placeholders}) AND record_type = ?"
+cursor = self._conn.execute(query, [*uuids, record_type])
 ```
 
-**This is a new failure mode** — not seen in Trials 7/8/9 because UUIDStore always failed on the `:memory:` multi-connection trap or missing CREATE TABLE before reaching `filter_new` logic. This is the first trial where the persistent connection was correctly implemented, exposing the SQL logic bug underneath.
+**Fix needed**: Task doc Behavior section must provide this SQL pattern explicitly.
 
-**Fix needed**: The task doc's Behavior section should provide the correct SQL pattern for `filter_new` — specifically that SQLite does not support multi-column IN clauses and the correct query uses a single-column IN with `AND record_type = ?`.
+#### Task 17 — Docker: UUIDStore Full-Suite Leak
 
----
-
-#### Task 16 — ExerciseSessionExtractor: Lint-Only Warning
-
-**Status**: Tests passed. Aider exhausted 3 reflections on a lint-only issue (E501 line too long in the pre-written test file — a string literal in `CREATE TABLE` that exceeds 88 chars). The implementation is correct; the lint issue is in the test file which the model is not supposed to edit.
-
-**Note**: This is a benign runner behavior — `⚠️ Completed with warnings` correctly captures it. The implementation is good.
-
-**Potential fix**: The pre-written test file has two occurrences of an 88+ char string literal in a `CREATE TABLE` statement. Claude Code should break these across lines when authoring test files to avoid handing the model an unresolvable lint error.
+Runner ran full suite for verification (no `test_command`), picked up 7 failing UUIDStore
+tests. Docker files were likely generated correctly — this is a verification artifact.
 
 ---
 
-#### Task 17 — Docker: Degraded Due to UUIDStore Full-Suite Leak
+### Trial Set 11 — Codestral 22B After Cascade Fix (2026-03-12)
+**Log**: `run-20260312-115442.log`
+**Model**: Codestral 22B v0.1 (via LM Studio) — `lm_studio/mistralai/codestral-22b-v0.1`
+**Context**: 32,768 tokens
+**Skill state**: Same as T10 — post cascade-fix + post settings fix
+**Result**: 7/17 ✅, 9 degraded ⚠️, 1 warning, 0 halts
 
-**Status**: The Docker task has no `test_command` (infrastructure config only, `pre_validated: false`). However the runner ran the full test suite as verification, which picked up the 7 failing UUIDStore tests. Degraded as a result — not a Docker implementation failure.
-
-**The Docker files themselves were likely generated correctly** — this is a runner/verification artifact from the broken UUIDStore leaking into the full suite.
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | Passed — settings fix holds for Codestral too |
+| 02 UUIDStore | ⚠️ DEGRADED | **Lint spiral** — correct SQL logic but E501 on INSERT string literal; all 3 reflections spent on line-length, never ran tests |
+| 03 BaseRecordExtractor | ⚠️ DEGRADED | Lint spiral — E501 on list comprehension in `extract()`; exit 5 (no tests ran) |
+| 04 GoogleDriveClient | ⚠️ DEGRADED | **Edit format failure** — when stuck on `no tests ran`, produced prose + command instead of file edit; aider rejected non-conforming output; exit 5 |
+| 05 MinIOWriter | ⚠️ DEGRADED | Lint spiral — E501 on `__init__` signature; exit 5 |
+| 06 RabbitMQPublisher | ⚠️ DEGRADED | **Test file corruption** — replaced entire test file with `# ... rest of the test code ...` stub; exit 5 |
+| 07 StepsExtractor | ✅ | |
+| 08 BloodGlucoseExtractor | ✅ | |
+| 09 HeartRateExtractor | ⚠️ DEGRADED | **ABC not implemented** — overrode `extract()` correctly but did not add `_row_to_record()` stub; `TypeError: Can't instantiate abstract class` |
+| 10 HRVRmssdExtractor | ✅ | |
+| 11 SleepExtractor | ⚠️ DEGRADED | Same as task 09 — `_row_to_record()` missing; `Can't instantiate abstract class SleepExtractor` |
+| 12 ActiveCaloriesExtractor | ✅ | |
+| 13 DistanceExtractor | ⚠️ DEGRADED | Test file corruption — replaced with `# ... rest of the code...` stub; exit 5 |
+| 14 TotalCaloriesExtractor | ✅ | |
+| 15 OxygenSaturationExtractor | ⚠️ DEGRADED | Test file corruption — `# ... rest of the code...` stub; exit 5 |
+| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; same E501 lint warning as T10 (pre-written test file) |
+| 17 Docker | ⚠️ DEGRADED | UUIDStore full-suite leak (same as T10) |
 
 ---
 
-## Model Comparison Summary (Trials 6–10)
+#### Codestral T11 — Failure Mode Analysis
 
-| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 |
-|------------|---------|--------------|-----------|----------|
-| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (fixed by plan) |
-| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ |
-| Implements methods completely | ✅ | ⚠️ (leaves stubs) | ✅ | ✅ |
-| Class naming discipline | ✅ | ⚠️ | ✅ | ✅ |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ (fixed by task doc) |
-| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ (new) |
-| Solves Airflow DAG task | ❌ | ❌ | ✅ | NOT RUN (deferred) |
-| Hallucinates module names | ❌ | ❌ | ⚠️ | ❌ |
-| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ |
-| Cascade isolation | ❌ (structural) | ❌ (structural) | ❌ (structural) | ✅ (fixed by skill) |
+**Pattern 1 — Lint spiral (tasks 02, 03, 05)**: Codestral writes correct logic but generates
+lines slightly over 88 chars. When ruff reports E501, it attempts to fix by reformatting the
+same line rather than restructuring the statement. Reflections exhaust on lint, never reaching
+test execution. Exit code 5 (no tests ran) — pytest never invoked.
 
-**Overall TDD pass rate**: Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/18 · **Qwen T10: 15/17** (excluding deferred)
+This is distinct from Qwen's behavior: Qwen typically fixes lint successfully and moves on.
+Codestral gets stuck in an E501 reformat loop, writing cosmetically different but still-too-long
+lines each time.
+
+**Pattern 2 — Test file corruption (tasks 06, 13, 15)**: When Codestral cannot figure out why
+tests are not running, it rewrites the test file down to a 2-3 line stub:
+```
+"""Docstring."""
+# ... rest of the test code ...
+```
+This is the same disqualifying behavior seen in Trial Set 8 (corrupting `test_dag.py`). It
+is now confirmed as a consistent Codestral pattern across multiple task types, not a one-off.
+The test file is permanently destroyed and independent verification gets exit 5.
+
+**Pattern 3 — Edit format failure (task 04)**: When stuck and unable to produce a valid file
+edit, Codestral falls back to outputting prose and shell commands. Aider rejects this
+("No filename provided before ```"). All 3 reflections consumed by format errors.
+
+**Pattern 4 — Incomplete ABC implementation (tasks 09, 11)**: For override tasks, Codestral
+correctly implements `extract()` but omits the required `_row_to_record()` stub that satisfies
+the ABC. Python raises `TypeError: Can't instantiate abstract class` at fixture setup time.
+The task doc explicitly shows `_row_to_record()` raising `NotImplementedError` — Codestral
+includes the method signature in comments but does not emit the actual method body.
+
+**Cascade isolation still holds**: Despite 9 degraded tasks, no task was blocked by another
+task's failure. Each degraded via its own independent lint/corruption/ABC issue. This confirms
+the structural fix is working — Codestral's failures are all self-contained.
+
+**Settings fix holds**: Task 01 passed cleanly for Codestral, confirming the plan-format fix
+is model-agnostic.
+
+---
+
+## Model Comparison Summary (Trials 6–11)
+
+| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 |
+|------------|---------|--------------|-----------|----------|---------------|
+| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (plan fix) | ✅ (plan fix) |
+| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ (omits stub) |
+| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ |
+| Resolves E501 lint reliably | ✅ | ❌ (loops) | ✅ | ✅ | ❌ (loops) |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ |
+| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A (lint blocked) |
+| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ | ❌ (corrupts) |
+| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ |
+| Aider edit format discipline | ✅ | ⚠️ | ✅ | ✅ | ⚠️ |
+
+**Overall TDD pass rate**: Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/18 · Qwen T10: 15/17 · **Codestral T11: 7/17**
+
+Codestral's score is substantially worse than Qwen T10. Its three consistent failure patterns
+(lint loops, test file corruption, incomplete ABC) are model-level behaviours that cannot be
+addressed by task doc improvements alone. Codestral is effectively disqualified for this
+scaffold at its current capability level.
 
 ---
 
 ## Open Issues
 
 1. **UUIDStore — SQLite multi-column IN clause (Qwen T10)**: Task doc Behavior section needs
-   to provide the correct `filter_new` SQL pattern — single-column `IN` with `AND record_type = ?`.
-   The model consistently attempts a multi-column `IN` construct that SQLite does not support.
+   the correct `filter_new` SQL pattern — single-column `IN` with `AND record_type = ?`.
 
 2. **ExerciseSessionExtractor test file — E501 lint**: Pre-written test file has a `CREATE TABLE`
-   string literal > 88 chars. Claude Code should split it across lines to avoid handing the model
-   an unresolvable lint failure.
+   string literal > 88 chars. Claude Code should split it when authoring to avoid handing the
+   model an unresolvable lint error.
 
-3. **DAG wiring hallucination (Gemini T9)**: Wiring task must enumerate exact class names with
-   "Do not import any class not listed here." Not yet tested with Qwen T10 (DAG task deferred).
+3. **Codestral — test file corruption**: Confirmed as a consistent pattern (T8 + T11). Runner
+   should detect writes to `tests/` files and halt. Codestral is effectively disqualified
+   for this scaffold until this behaviour changes.
 
-4. **Codestral test file corruption**: Runner should detect edits to `tests/` files and halt.
+4. **DAG wiring hallucination (Gemini T9)**: Wiring task must enumerate exact class names with
+   "Do not import any class not listed here." Not yet tested post-cascade-fix.
 
 5. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
 
@@ -376,8 +422,8 @@ def filter_new(self, uuids, record_type):
 | 2026-03-10 | `references/stacks/python-pytest.md` | New: all Python-specific content |
 | 2026-03-10 | `references/stacks/typescript-jest.md` | New: TypeScript/Jest stub |
 | 2026-03-10 | `references/stacks/kotlin-junit.md` | New: Kotlin/JUnit/Gradle stub |
-| 2026-03-10 | `implementation-planning/references/plan-format.md` | **Fix**: component tasks never modify shared files; wiring is always a separate deferred phase; removed inline Wiring section from task template; phasing guidelines rewritten |
-| 2026-03-10 | `references/writing-guide.md` | **Fix**: replaced Test Scope Rule workaround with structural component/wiring task separation; Deferred Tasks section updated to make wiring tasks the primary example |
-| 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example to show deferred wiring task entry |
-| 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation of why they don't exist in component tasks |
-| 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: added rule prohibiting module-level instantiation of environment-dependent objects in interface contracts |
+| 2026-03-10 | `implementation-planning/references/plan-format.md` | **Fix**: component tasks never modify shared files; wiring always deferred; phasing guidelines rewritten |
+| 2026-03-10 | `references/writing-guide.md` | **Fix**: component/wiring structural separation; Deferred Tasks updated |
+| 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example |
+| 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation |
+| 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects in interface contracts |
