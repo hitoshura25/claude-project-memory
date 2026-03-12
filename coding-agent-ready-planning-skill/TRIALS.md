@@ -239,46 +239,120 @@ problem, not a model capability problem.
 
 ---
 
-## Model Comparison Summary (Trials 6–9)
+### Trial Set 10 — Qwen Coder After Cascade Fix + Settings Fix (2026-03-12)
+**Log**: `run-20260312-112908.log`
+**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
+**Context**: 32,768 tokens
+**Skill state**: Post cascade-fix (component/wiring separation) + post settings fix (no module-level singleton in interface contracts)
+**Result**: 15/17 ✅, 2 degraded ⚠️ (tasks 2, 17), task 16 completed with lint warnings
 
-| Capability | Qwen 30B Q4 | Codestral 22B | Gemini Flash Lite |
-|------------|-------------|---------------|-------------------|
-| Follows ABC override instructions | ✅ | ❌ | ✅ |
-| Implements methods completely | ✅ | ⚠️ (leaves stubs) | ✅ |
-| Class naming discipline | ✅ | ⚠️ | ✅ |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ |
-| Settings lazy init trap | ❌ | ❌ | ✅ (self-diagnoses) |
-| Solves Airflow DAG task 12 | ❌ | ❌ | ✅ |
-| Hallucinates module names | ❌ | ❌ | ⚠️ |
-| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ |
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | **Fixed** — no module-level instantiation. Passed cleanly first attempt. |
+| 02 UUIDStore | ⚠️ DEGRADED | New SQL bug — see below |
+| 03 BaseRecordExtractor | ✅ | |
+| 04 GoogleDriveClient | ✅ | |
+| 05 MinIOWriter | ✅ | |
+| 06 RabbitMQPublisher | ✅ | |
+| 07–11 | ✅ | All 5 extractors (Steps, BloodGlucose, HeartRate, HRV, Sleep) |
+| 12–15 | ✅ | All 4 secondary extractors (ActiveCalories, Distance, TotalCalories, OxygenSaturation) |
+| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; aider exhausted reflections on lint-only issue (E501 line too long in test file) |
+| 17 Docker | ⚠️ DEGRADED | No test_command — degraded due to UUIDStore full-suite leak (see below) |
 
-**Overall TDD pass rate**: Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/18
+**Cascade isolation confirmed**: Tasks 07–16 all passed with `test_command` scoped to their
+own test files only. UUIDStore's broken state did NOT cascade to any extractor. The
+component/wiring separation fix worked exactly as intended.
 
-Gemini Flash Lite is the strongest performer. Its hallucination failure is correctable with
-explicit extractor enumeration in the DAG wiring task.
+**Settings fix confirmed**: Task 01 passed on first attempt with no module-level instantiation
+issue. The `plan-format.md` fix (do not include module-level singleton in interface contracts)
+propagated correctly through the regenerated plan and task doc.
+
+**HeartRate and Sleep extractors (tasks 09, 11)**: Both passed — the override pattern (`extract()` 
+directly, `_row_to_record()` raises NotImplementedError) was correctly followed.
+
+---
+
+#### Task 02 — UUIDStore Degraded: New SQL Bug
+
+**Error**: `sqlite3.OperationalError: IN(...) element has 1 term - expected 2`
+
+**Root cause**: Model used a row-value constructor in the SQL IN clause — `WHERE (uuid_hex, record_type) IN (?, ?, ?, ?)` — which SQLite does not support. SQLite's `IN` clause requires single-value terms: `WHERE col IN (?, ?, ?)`. The model attempted this approach across all 3 reflection loops, never escaping it.
+
+**Model's attempted fix**: Flattened params as `[uuid1, record_type, uuid2, record_type, ...]` — correct for the tuple syntax in other databases, but SQLite rejected the multi-column IN construct regardless of parameter binding.
+
+**Correct implementation**: Filter by `uuid_hex` only (since `record_type` is also passed, use `AND record_type = ?` in a separate clause), or use a simpler loop/set approach:
+```python
+def filter_new(self, uuids, record_type):
+    if not uuids:
+        return []
+    placeholders = ','.join('?' * len(uuids))
+    query = f"SELECT uuid_hex FROM seen_uuids WHERE uuid_hex IN ({placeholders}) AND record_type = ?"
+    cursor = self._conn.execute(query, [*uuids, record_type])
+    seen = {row[0] for row in cursor.fetchall()}
+    return [u for u in uuids if u not in seen]
+```
+
+**This is a new failure mode** — not seen in Trials 7/8/9 because UUIDStore always failed on the `:memory:` multi-connection trap or missing CREATE TABLE before reaching `filter_new` logic. This is the first trial where the persistent connection was correctly implemented, exposing the SQL logic bug underneath.
+
+**Fix needed**: The task doc's Behavior section should provide the correct SQL pattern for `filter_new` — specifically that SQLite does not support multi-column IN clauses and the correct query uses a single-column IN with `AND record_type = ?`.
+
+---
+
+#### Task 16 — ExerciseSessionExtractor: Lint-Only Warning
+
+**Status**: Tests passed. Aider exhausted 3 reflections on a lint-only issue (E501 line too long in the pre-written test file — a string literal in `CREATE TABLE` that exceeds 88 chars). The implementation is correct; the lint issue is in the test file which the model is not supposed to edit.
+
+**Note**: This is a benign runner behavior — `⚠️ Completed with warnings` correctly captures it. The implementation is good.
+
+**Potential fix**: The pre-written test file has two occurrences of an 88+ char string literal in a `CREATE TABLE` statement. Claude Code should break these across lines when authoring test files to avoid handing the model an unresolvable lint error.
+
+---
+
+#### Task 17 — Docker: Degraded Due to UUIDStore Full-Suite Leak
+
+**Status**: The Docker task has no `test_command` (infrastructure config only, `pre_validated: false`). However the runner ran the full test suite as verification, which picked up the 7 failing UUIDStore tests. Degraded as a result — not a Docker implementation failure.
+
+**The Docker files themselves were likely generated correctly** — this is a runner/verification artifact from the broken UUIDStore leaking into the full suite.
+
+---
+
+## Model Comparison Summary (Trials 6–10)
+
+| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 |
+|------------|---------|--------------|-----------|----------|
+| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (fixed by plan) |
+| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ |
+| Implements methods completely | ✅ | ⚠️ (leaves stubs) | ✅ | ✅ |
+| Class naming discipline | ✅ | ⚠️ | ✅ | ✅ |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ (fixed by task doc) |
+| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ (new) |
+| Solves Airflow DAG task | ❌ | ❌ | ✅ | NOT RUN (deferred) |
+| Hallucinates module names | ❌ | ❌ | ⚠️ | ❌ |
+| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ |
+| Cascade isolation | ❌ (structural) | ❌ (structural) | ❌ (structural) | ✅ (fixed by skill) |
+
+**Overall TDD pass rate**: Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/18 · **Qwen T10: 15/17** (excluding deferred)
 
 ---
 
 ## Open Issues
 
-1. **Settings — module-level instantiation (Qwen + Codestral)**: Pre-provide a `LazySettings`
-   skeleton in the task doc. Gemini solved it autonomously — local models need it spelled out.
+1. **UUIDStore — SQLite multi-column IN clause (Qwen T10)**: Task doc Behavior section needs
+   to provide the correct `filter_new` SQL pattern — single-column `IN` with `AND record_type = ?`.
+   The model consistently attempts a multi-column `IN` construct that SQLite does not support.
 
-2. **UUIDStore — multi-connection `:memory:` trap (Qwen)**: Task doc must mandate `self._conn`
-   persistent connection.
+2. **ExerciseSessionExtractor test file — E501 lint**: Pre-written test file has a `CREATE TABLE`
+   string literal > 88 chars. Claude Code should split it across lines to avoid handing the model
+   an unresolvable lint failure.
 
-3. **DAG wiring hallucination (Gemini)**: Wiring task must enumerate exact class names with:
-   "Do not import any class not listed here."
+3. **DAG wiring hallucination (Gemini T9)**: Wiring task must enumerate exact class names with
+   "Do not import any class not listed here." Not yet tested with Qwen T10 (DAG task deferred).
 
-4. **Cascade structure — RESOLVED in plan format**: Extractor tasks must never inline DAG
-   modifications. All wiring is deferred to a dedicated wiring task after all components
-   complete. This is now codified in `plan-format.md` and `writing-guide.md` (2026-03-10).
+4. **Codestral test file corruption**: Runner should detect edits to `tests/` files and halt.
 
-5. **Codestral test file corruption**: Runner should detect edits to `tests/` files and halt.
+5. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
 
-6. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
-
-7. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
+6. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
 
 ---
 
@@ -304,3 +378,6 @@ explicit extractor enumeration in the DAG wiring task.
 | 2026-03-10 | `references/stacks/kotlin-junit.md` | New: Kotlin/JUnit/Gradle stub |
 | 2026-03-10 | `implementation-planning/references/plan-format.md` | **Fix**: component tasks never modify shared files; wiring is always a separate deferred phase; removed inline Wiring section from task template; phasing guidelines rewritten |
 | 2026-03-10 | `references/writing-guide.md` | **Fix**: replaced Test Scope Rule workaround with structural component/wiring task separation; Deferred Tasks section updated to make wiring tasks the primary example |
+| 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example to show deferred wiring task entry |
+| 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation of why they don't exist in component tasks |
+| 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: added rule prohibiting module-level instantiation of environment-dependent objects in interface contracts |
