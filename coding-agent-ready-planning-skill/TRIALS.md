@@ -373,41 +373,114 @@ state. Runner was restarted cleanly and the full run (`132307`) proceeded from s
 
 ---
 
-## Model Comparison Summary (Trials 6–12)
+### Trial Set 13 — Qwen After import_integrity Fix (2026-03-12)
+**Logs**: `run-20260312-164811.log` (primary); `run-20260312-164812.log` (second log — content TBD)
+**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
+**Context**: 32,768 tokens
+**Skill state**: Post Chat 4 fixes — wiring task now pre-generated with `import_integrity` test; integration test remains deferred
+**Result**: 17/18 ✅, 1 degraded ⚠️ (task 17 wiring)
 
-| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 |
-|------------|---------|--------------|-----------|----------|---------------|------------|
-| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (plan fix) | ✅ (plan fix) | ✅ |
-| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ (omits stub) | ✅ |
-| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ |
-| Resolves E501 lint reliably | ✅ | ❌ (loops) | ✅ | ✅ | ❌ (loops) | ✅ (self-fixes test file) |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ (no problem) |
-| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ | ❌ (corrupts) | ✅ (improves) |
-| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ |
-| Aider edit format discipline | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ |
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | |
+| 02 UUIDStore | ✅ | |
+| 03 BaseRecordExtractor | ✅ | |
+| 04 GoogleDriveClient | ✅ | |
+| 05 MinIOWriter | ✅ | |
+| 06 RabbitMQPublisher | ✅ | |
+| 07 StepsExtractor | ✅ | |
+| 08 BloodGlucoseExtractor | ✅ | |
+| 09 HeartRateExtractor | ✅ | |
+| 10 HRVRmssdExtractor | ✅ | |
+| 11 SleepExtractor | ✅ | |
+| 12 ActiveCaloriesExtractor | ✅ | |
+| 13 DistanceExtractor | ✅ | |
+| 14 TotalCaloriesExtractor | ✅ | |
+| 15 OxygenSaturationExtractor | ✅ | |
+| 16 ExerciseSessionExtractor | ✅ | |
+| 17 Wire DAG | ⚠️ DEGRADED | Reflections exhausted on E501 lint in DAG file; tests ultimately pass (verified independently) |
+| 18 Docker | ✅ | |
 
-**Overall TDD pass rate (component tasks only)**:
-Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/13 (halted) · Qwen T10: 15/17 · Codestral T11: 7/17 · **Gemini T12: 17/17**
+**Runner summary**: `18 tasks succeeded, 1 degraded. Deferred: 19-task-8.1-integration-test.md`
 
-Gemini 3.1 Flash Lite is the clear winner and the reference model going forward for this scaffold.
+#### Task 17 — Wire DAG: E501 Lint Spiral in Generated DAG File
+
+Qwen implemented the DAG correctly on the first attempt — all logic, imports, TaskGroup
+structure, and dependency wiring were right. However, `xcom_pull` calls with f-string
+`task_ids` parameters produced lines > 88 chars, triggering E501 on every reflection.
+
+**Spiral sequence:**
+1. Reflection 1 — fixed most E501s by wrapping `xcom_pull` calls; one `record_uuids` list
+   comprehension remained at 89 chars
+2. Reflection 2 — LM Studio hit a `litellm.InternalServerError` (model repeating same chunk)
+   mid-generation. Aider caught and retried. Output was garbled: ~30 duplicate
+   `from plugins.writers.minio_writer import MinIOWriter` lines, then the lint command path
+   embedded literally as a Python import — `from plugins.writers.airflow-ingestion-tasks/lint.sh...`
+   This produced syntax errors.
+3. Reflection 3 — model recovered correctly, rewrote the full file cleanly. But the one
+   remaining E501 (list comprehension on line 215) persisted and reflections were exhausted.
+4. Runner verified tests independently — all 4 `test_dag.py` tests passed. Marked ⚠️.
+
+**Key observation — import_integrity worked correctly**: Qwen did not add any hallucinated
+imports. All 15 classes imported were exactly those listed in the task doc. The
+`test_all_extractor_classes_importable` and `test_infrastructure_classes_importable` tests
+passed without needing any correction.
+
+**Root cause of degradation**: The one remaining E501 was `record_uuids = [record.get("uuid")
+for record in records if "uuid" in record]` (89 chars — just 1 over). This is a generated
+implementation line in the DAG file (not a pre-written test file), so it's legitimately the
+model's responsibility to fix. Qwen fixed it in all prior reflections except this one line.
+The InternalServerError in reflection 2 consumed a reflection slot on garbage output.
+
+**Fix options:**
+1. Accept ⚠️ as normal for complex wiring tasks with many xcom calls (Qwen characteristic)
+2. Add a note in the wiring task doc that xcom_pull lines with f-string task_ids should be
+   wrapped across 3 lines proactively
+
+---
+
+## Model Comparison Summary (Trials 6–13)
+
+| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 | Qwen T13 |
+|------------|---------|--------------|-----------|----------|---------------|------------|----------|
+| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (plan fix) | ✅ (plan fix) | ✅ | ✅ |
+| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ (omits stub) | ✅ | ✅ |
+| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ |
+| Resolves E501 lint reliably | ✅ | ❌ (loops) | ✅ | ✅ | ❌ (loops) | ✅ (self-fixes test file) | ⚠️ (misses 1 line after InternalServerError) |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ | ✅ |
+| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ | ❌ (corrupts) | ✅ (improves) | ✅ |
+| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ | ✅ |
+| import_integrity — no hallucinated imports | N/A | N/A | ❌ (T9) | N/A | N/A | N/A | ✅ |
+| Aider edit format discipline | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ |
+
+**Overall TDD pass rate**:
+Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/13 (halted) · Qwen T10: 15/17 · Codestral T11: 7/17 · Gemini T12: 17/17 · **Qwen T13: 17/18 (wiring ⚠️)**
+
+Gemini 3.1 Flash Lite remains the reference model. Qwen T13 is the strongest Qwen result to
+date — all component tasks clean, wiring task correct but degraded on one lint line after a
+mid-reflection InternalServerError interrupted the fix sequence.
 
 ---
 
 ## Open Issues
 
-1. **DAG wiring task**: Task doc for `wire-dag` has not yet been generated or run. With the
-   new `import_integrity` pattern, this is no longer a "deferred" task — generate it upfront
-   before the next trial run. When generating: read each extractor source file for actual class
-   name and import path; enumerate every class explicitly; include the `test_all_classes_importable`
-   test; include "Do not import any class not listed here".
+1. **Wiring task E501 — Qwen characteristic**: XCom pull lines with f-string `task_ids` hit
+   88-char limit. Consider adding a note in the wiring task doc template to pre-wrap these
+   lines (or adjust line length tolerance for DAG files specifically). Low priority — tests
+   passed; this is a cosmetic degradation only.
 
-2. **Codestral — disqualified**: Confirmed across T8 and T11. Test file corruption is a
-   consistent model-level behaviour. No further trials planned.
+2. **InternalServerError recovery**: LM Studio emitted a garbled repeat-chunk response mid
+   reflection on task 17. Aider caught and retried, but the retry consumed a reflection slot
+   on garbage. Not addressable at skill level — this is a model serving instability. Observed
+   only once across T13.
 
-3. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
+3. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
+   Generate and run when infrastructure is available.
 
-4. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
+4. **Codestral — disqualified**: Confirmed across T8 and T11. No further trials planned.
+
+5. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
 
 ---
 
@@ -436,7 +509,7 @@ Gemini 3.1 Flash Lite is the clear winner and the reference model going forward 
 | 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example |
 | 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation |
 | 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects in interface contracts |
-| 2026-03-12 | `references/writing-guide.md` | **Fix**: Two-Layer Validation Gate → Three-Layer; added Layer 0 (lint gate): run linter against pre-written test files before embedding; must return zero errors before proceeding. Updated Deferred Tasks section to clarify the runner pause is a generation step, not a failure, and added "Do not import any class not listed here" guidance for wiring task docs |
-| 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: expanded Persistence Class Stubs into two sections; added "SQLite Trap Patterns" with Trap 1 (`:memory:` multi-connection) and Trap 2 (multi-column IN clause); both include task doc Behavior entry wording for Claude Code to copy when writing task docs |
-| 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks are no longer deferred — generated upfront alongside component tasks. Added `import_integrity` mandatory test scenario for all wiring tasks. Only integration tests remain deferred. Updated Phase 6 description and Deferred Tasks section accordingly. Updated Document Structure template to show wiring tasks without *(deferred)* marker. |
-| 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: "All wiring tasks are deferred" → wiring tasks generated upfront, sequenced after components. Added "Wiring Task Tests" section: Layer 1 (mutation gate) is skipped for wiring tasks; Layer 2 becomes an import integrity check against actual produced files. `import_integrity` scenario is now mandatory. Updated manifest examples to show `deferred: false` for wiring tasks, `deferred: true` only for integration tests. |
+| 2026-03-12 | `references/writing-guide.md` | **Fix**: Three-Layer Validation Gate; Layer 0 lint gate; Deferred Tasks clarified; "Do not import any class not listed here" guidance added |
+| 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: SQLite Trap Patterns — Trap 1 (:memory: multi-connection) and Trap 2 (multi-column IN clause) |
+| 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks no longer deferred; `import_integrity` scenario mandatory; only integration tests remain deferred |
+| 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section added; Layer 1 skipped for wiring; Layer 2 = import integrity check against actual files; manifest examples updated |
