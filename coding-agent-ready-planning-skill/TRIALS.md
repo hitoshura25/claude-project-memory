@@ -300,101 +300,119 @@ tests. Docker files were likely generated correctly — this is a verification a
 | 01 Settings | ✅ | Passed — settings fix holds for Codestral too |
 | 02 UUIDStore | ⚠️ DEGRADED | **Lint spiral** — correct SQL logic but E501 on INSERT string literal; all 3 reflections spent on line-length, never ran tests |
 | 03 BaseRecordExtractor | ⚠️ DEGRADED | Lint spiral — E501 on list comprehension in `extract()`; exit 5 (no tests ran) |
-| 04 GoogleDriveClient | ⚠️ DEGRADED | **Edit format failure** — when stuck on `no tests ran`, produced prose + command instead of file edit; aider rejected non-conforming output; exit 5 |
+| 04 GoogleDriveClient | ⚠️ DEGRADED | **Edit format failure** — when stuck on `no tests ran`, produced prose + command; aider rejected non-conforming output; exit 5 |
 | 05 MinIOWriter | ⚠️ DEGRADED | Lint spiral — E501 on `__init__` signature; exit 5 |
 | 06 RabbitMQPublisher | ⚠️ DEGRADED | **Test file corruption** — replaced entire test file with `# ... rest of the test code ...` stub; exit 5 |
 | 07 StepsExtractor | ✅ | |
 | 08 BloodGlucoseExtractor | ✅ | |
-| 09 HeartRateExtractor | ⚠️ DEGRADED | **ABC not implemented** — overrode `extract()` correctly but did not add `_row_to_record()` stub; `TypeError: Can't instantiate abstract class` |
+| 09 HeartRateExtractor | ⚠️ DEGRADED | **ABC not implemented** — overrode `extract()` but omitted `_row_to_record()` stub; `Can't instantiate abstract class` |
 | 10 HRVRmssdExtractor | ✅ | |
-| 11 SleepExtractor | ⚠️ DEGRADED | Same as task 09 — `_row_to_record()` missing; `Can't instantiate abstract class SleepExtractor` |
+| 11 SleepExtractor | ⚠️ DEGRADED | Same as task 09 — `_row_to_record()` missing |
 | 12 ActiveCaloriesExtractor | ✅ | |
-| 13 DistanceExtractor | ⚠️ DEGRADED | Test file corruption — replaced with `# ... rest of the code...` stub; exit 5 |
+| 13 DistanceExtractor | ⚠️ DEGRADED | Test file corruption — `# ... rest of the code...` stub; exit 5 |
 | 14 TotalCaloriesExtractor | ✅ | |
 | 15 OxygenSaturationExtractor | ⚠️ DEGRADED | Test file corruption — `# ... rest of the code...` stub; exit 5 |
-| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; same E501 lint warning as T10 (pre-written test file) |
-| 17 Docker | ⚠️ DEGRADED | UUIDStore full-suite leak (same as T10) |
+| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; E501 lint in pre-written test file |
+| 17 Docker | ⚠️ DEGRADED | UUIDStore full-suite leak |
+
+Codestral confirmed disqualified: lint loops, test file corruption, incomplete ABC, edit format
+failures are all consistent model-level behaviours not addressable through task doc improvements.
 
 ---
 
-#### Codestral T11 — Failure Mode Analysis
+### Trial Set 12 — Gemini 3.1 Flash Lite Preview — Clean Sweep (2026-03-12)
+**Log**: `run-20260312-132307.log` (primary); `run-20260312-132242.log` (aborted restart)
+**Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
+**Skill state**: Same as T10/T11 — post cascade-fix + post settings fix. No additional task doc changes since T10.
+**Result**: **17/17 ✅ — first complete clean sweep across all component tasks**
 
-**Pattern 1 — Lint spiral (tasks 02, 03, 05)**: Codestral writes correct logic but generates
-lines slightly over 88 chars. When ruff reports E501, it attempts to fix by reformatting the
-same line rather than restructuring the statement. Reflections exhaust on lint, never reaching
-test execution. Exit code 5 (no tests ran) — pytest never invoked.
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | |
+| 02 UUIDStore | ✅ | **SQL pattern correct on first attempt** — `WHERE record_type = ? AND uuid_hex IN (...)` with `[record_type] + uuids` params; single-column IN, no row-value constructor |
+| 03 BaseRecordExtractor | ✅ | |
+| 04 GoogleDriveClient | ✅ | |
+| 05 MinIOWriter | ✅ | |
+| 06 RabbitMQPublisher | ✅ | |
+| 07–08 | ✅ | StepsExtractor, BloodGlucoseExtractor |
+| 09 HeartRateExtractor | ✅ | Override pattern followed correctly; 2 reflections |
+| 10 HRVRmssdExtractor | ✅ | |
+| 11 SleepExtractor | ✅ | Override pattern followed correctly; 2 reflections |
+| 12–15 | ✅ | ActiveCalories, Distance, TotalCalories, OxygenSaturation |
+| 16 ExerciseSessionExtractor | ✅ | **Fixed E501 in pre-written test file** — rewrote `CREATE TABLE` string splits and INSERT line across lines; 2 reflections; 4 tests pass |
+| 17 Docker | ✅ | 89 tests pass in full-suite verification; no UUIDStore leak |
 
-This is distinct from Qwen's behavior: Qwen typically fixes lint successfully and moves on.
-Codestral gets stuck in an E501 reformat loop, writing cosmetically different but still-too-long
-lines each time.
+**Total LLM calls across entire run**: 27 (including all reflections). Extremely efficient.
 
-**Pattern 2 — Test file corruption (tasks 06, 13, 15)**: When Codestral cannot figure out why
-tests are not running, it rewrites the test file down to a 2-3 line stub:
-```
-"""Docstring."""
-# ... rest of the test code ...
-```
-This is the same disqualifying behavior seen in Trial Set 8 (corrupting `test_dag.py`). It
-is now confirmed as a consistent Codestral pattern across multiple task types, not a one-off.
-The test file is permanently destroyed and independent verification gets exit 5.
-
-**Pattern 3 — Edit format failure (task 04)**: When stuck and unable to produce a valid file
-edit, Codestral falls back to outputting prose and shell commands. Aider rejects this
-("No filename provided before ```"). All 3 reflections consumed by format errors.
-
-**Pattern 4 — Incomplete ABC implementation (tasks 09, 11)**: For override tasks, Codestral
-correctly implements `extract()` but omits the required `_row_to_record()` stub that satisfies
-the ABC. Python raises `TypeError: Can't instantiate abstract class` at fixture setup time.
-The task doc explicitly shows `_row_to_record()` raising `NotImplementedError` — Codestral
-includes the method signature in comments but does not emit the actual method body.
-
-**Cascade isolation still holds**: Despite 9 degraded tasks, no task was blocked by another
-task's failure. Each degraded via its own independent lint/corruption/ABC issue. This confirms
-the structural fix is working — Codestral's failures are all self-contained.
-
-**Settings fix holds**: Task 01 passed cleanly for Codestral, confirming the plan-format fix
-is model-agnostic.
+**Zero test failures, zero degraded tasks, zero halts.**
 
 ---
 
-## Model Comparison Summary (Trials 6–11)
+#### T12 Notable Behaviours
 
-| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 |
-|------------|---------|--------------|-----------|----------|---------------|
-| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (plan fix) | ✅ (plan fix) |
-| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ (omits stub) |
-| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ |
-| Resolves E501 lint reliably | ✅ | ❌ (loops) | ✅ | ✅ | ❌ (loops) |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ |
-| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A (lint blocked) |
-| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ | ❌ (corrupts) |
-| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ |
-| Aider edit format discipline | ✅ | ⚠️ | ✅ | ✅ | ⚠️ |
+**UUIDStore SQL — immediate correct pattern**: Without any hint in the task doc, Gemini used
+`WHERE record_type = ? AND uuid_hex IN (placeholders)` with params `[record_type] + uuids`.
+This is the correct single-column approach. Also used composite `PRIMARY KEY (uuid_hex, record_type)`
+in the schema. Did not attempt the multi-column IN constructor that broke Qwen T10.
 
-**Overall TDD pass rate**: Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/18 · Qwen T10: 15/17 · **Codestral T11: 7/17**
+**ExerciseSession test file E501 — self-corrected**: Task 16 encountered the same pre-written
+test file E501 that caused a lint-only degradation warning in T10 and T11. Gemini fixed it
+by splitting the `CREATE TABLE` string literal across three lines and wrapping the INSERT call
+— all while keeping the test semantics intact. This resolves open issue #2 (though Claude Code
+should still author the test file correctly to avoid the situation).
 
-Codestral's score is substantially worse than Qwen T10. Its three consistent failure patterns
-(lint loops, test file corruption, incomplete ABC) are model-level behaviours that cannot be
-addressed by task doc improvements alone. Codestral is effectively disqualified for this
-scaffold at its current capability level.
+**Override tasks (HeartRate, Sleep) — clean in 2 reflections each**: Correctly overrode
+`extract()` directly, left `_row_to_record()` raising `NotImplementedError` as required.
+
+**Docker — full 89-test suite pass**: UUIDStore passing (task 02 succeeded) meant the Docker
+task's full-suite verification found no leaking failures. This was the same task that degraded
+in T10 and T11 purely because of UUIDStore failures propagating into the full suite.
+
+**Aborted first run** (`run-20260312-132242.log`): 93-line truncated log showing an API-level
+restart after task 01 completed; UUIDStore stub was in default `raise NotImplementedError`
+state. Runner was restarted cleanly and the full run (`132307`) proceeded from scratch.
+
+---
+
+## Model Comparison Summary (Trials 6–12)
+
+| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 |
+|------------|---------|--------------|-----------|----------|---------------|------------|
+| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (plan fix) | ✅ (plan fix) | ✅ |
+| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ (omits stub) | ✅ |
+| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ |
+| Resolves E501 lint reliably | ✅ | ❌ (loops) | ✅ | ✅ | ❌ (loops) | ✅ (self-fixes test file) |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ (no problem) |
+| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ | ❌ (corrupts) | ✅ (improves) |
+| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ |
+| Aider edit format discipline | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ |
+
+**Overall TDD pass rate (component tasks only)**:
+Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/13 (halted) · Qwen T10: 15/17 · Codestral T11: 7/17 · **Gemini T12: 17/17**
+
+Gemini 3.1 Flash Lite is the clear winner and the reference model going forward for this scaffold.
 
 ---
 
 ## Open Issues
 
-1. **UUIDStore — SQLite multi-column IN clause (Qwen T10)**: Task doc Behavior section needs
-   the correct `filter_new` SQL pattern — single-column `IN` with `AND record_type = ?`.
+1. **ExerciseSessionExtractor test file — E501 lint**: ~~Pre-written test file has `CREATE TABLE`
+   string literal > 88 chars.~~ **Mitigated in T12** — Gemini self-corrected. Claude Code should
+   still author test files with properly wrapped string literals to avoid the situation entirely.
 
-2. **ExerciseSessionExtractor test file — E501 lint**: Pre-written test file has a `CREATE TABLE`
-   string literal > 88 chars. Claude Code should split it when authoring to avoid handing the
-   model an unresolvable lint error.
+2. **DAG wiring task (deferred)**: The DAG wiring task (`18-task-6.1-wire-dag.md`) has not yet
+   been generated or run. Gemini T9's hallucination failure (importing a non-existent
+   `sleep_session_extractor` module) suggests the wiring task doc should enumerate exact class
+   names and include "Do not import any class not listed here." The full-suite 89-test pass in
+   T12 means the codebase is in a clean state to generate and run the wiring task now.
 
-3. **Codestral — test file corruption**: Confirmed as a consistent pattern (T8 + T11). Runner
-   should detect writes to `tests/` files and halt. Codestral is effectively disqualified
-   for this scaffold until this behaviour changes.
+3. **UUIDStore SQL pattern — task doc update still recommended**: Gemini solved it without a
+   hint, but Qwen failed here in T10. The correct pattern should be documented in the task doc
+   Behavior section so Qwen-class models also pass reliably.
 
-4. **DAG wiring hallucination (Gemini T9)**: Wiring task must enumerate exact class names with
-   "Do not import any class not listed here." Not yet tested post-cascade-fix.
+4. **Codestral — disqualified**: Confirmed across T8 and T11. Test file corruption is a
+   consistent model-level behaviour. No further trials planned.
 
 5. **Summarizer fast failures**: Harmless but noisy. Real fix: `stream: false` or `max_tokens` cap.
 
