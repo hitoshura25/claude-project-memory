@@ -396,11 +396,11 @@ Gemini 3.1 Flash Lite is the clear winner and the reference model going forward 
 
 ## Open Issues
 
-1. **DAG wiring task (deferred)**: The DAG wiring task (`18-task-6.1-wire-dag.md`) has not yet
-   been generated or run. The codebase is in a clean state (89 tests passing) to generate and
-   run it now. When generating: read each extractor source file to get the actual class name and
-   import path; enumerate every class explicitly; include "Do not import any class not listed
-   here" to prevent the hallucinated-import failure seen in Gemini T9.
+1. **DAG wiring task**: Task doc for `wire-dag` has not yet been generated or run. With the
+   new `import_integrity` pattern, this is no longer a "deferred" task — generate it upfront
+   before the next trial run. When generating: read each extractor source file for actual class
+   name and import path; enumerate every class explicitly; include the `test_all_classes_importable`
+   test; include "Do not import any class not listed here".
 
 2. **Codestral — disqualified**: Confirmed across T8 and T11. Test file corruption is a
    consistent model-level behaviour. No further trials planned.
@@ -438,3 +438,5 @@ Gemini 3.1 Flash Lite is the clear winner and the reference model going forward 
 | 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects in interface contracts |
 | 2026-03-12 | `references/writing-guide.md` | **Fix**: Two-Layer Validation Gate → Three-Layer; added Layer 0 (lint gate): run linter against pre-written test files before embedding; must return zero errors before proceeding. Updated Deferred Tasks section to clarify the runner pause is a generation step, not a failure, and added "Do not import any class not listed here" guidance for wiring task docs |
 | 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: expanded Persistence Class Stubs into two sections; added "SQLite Trap Patterns" with Trap 1 (`:memory:` multi-connection) and Trap 2 (multi-column IN clause); both include task doc Behavior entry wording for Claude Code to copy when writing task docs |
+| 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks are no longer deferred — generated upfront alongside component tasks. Added `import_integrity` mandatory test scenario for all wiring tasks. Only integration tests remain deferred. Updated Phase 6 description and Deferred Tasks section accordingly. Updated Document Structure template to show wiring tasks without *(deferred)* marker. |
+| 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: "All wiring tasks are deferred" → wiring tasks generated upfront, sequenced after components. Added "Wiring Task Tests" section: Layer 1 (mutation gate) is skipped for wiring tasks; Layer 2 becomes an import integrity check against actual produced files. `import_integrity` scenario is now mandatory. Updated manifest examples to show `deferred: false` for wiring tasks, `deferred: true` only for integration tests. |
