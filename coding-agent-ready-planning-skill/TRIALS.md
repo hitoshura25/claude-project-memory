@@ -351,7 +351,7 @@ failures are all consistent model-level behaviours not addressable through task 
 #### T12 Notable Behaviours
 
 **UUIDStore SQL — immediate correct pattern**: Without any hint in the task doc, Gemini used
-`WHERE record_type = ? AND uuid_uuid IN (placeholders)` with params `[record_type] + uuids`.
+`WHERE record_type = ? AND uuid_hex IN (placeholders)` with params `[record_type] + uuids`.
 This is the correct single-column approach. Also used composite `PRIMARY KEY (uuid_hex, record_type)`
 in the schema. Did not attempt the multi-column IN constructor that broke Qwen T10.
 
@@ -469,9 +469,15 @@ in the Behavior section — the model copies whatever form it reads.
 
 ## Open Issues
 
-1. **RESOLVED → skill updated (2026-03-13)**: Wire DAG xcom_pull E501 — pre-wrap rule added
-   to `writing-guide.md` Core Principles and Wiring Task Tests sections. Regenerate task docs
-   to pick up the fix.
+1. **IN PROGRESS — Wire DAG xcom_pull E501**: Two skill updates applied (2026-03-13).
+   First pass added the pre-wrap principle to Core Principles and Wiring Task Tests.
+   Second pass (after verifying generated task doc) tightened the rule: now explicitly
+   requires **code snippets, not prose** for callable bodies in wiring task Behavior
+   sections, with concrete examples of xcom pulls, routing keys, and message dicts.
+   The "interface contracts, not implementation code" principle now has an explicit
+   exception carved out for wiring task call patterns that will structurally exceed
+   the line limit. Regenerate task docs to verify the updated rule produces correctly
+   wrapped Behavior sections.
 
 2. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: If aider
    exits 0 but a known critical export (like `EXTRACTORS`) is not importable, restore from
@@ -515,4 +521,5 @@ in the Behavior section — the model copies whatever form it reads.
 | 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: SQLite Trap Patterns — Trap 1 (:memory: multi-connection) and Trap 2 (multi-column IN clause) |
 | 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks no longer deferred; `import_integrity` scenario mandatory; only integration tests remain deferred |
 | 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section added; Layer 1 skipped for wiring; Layer 2 = import integrity check against actual files; manifest examples updated |
-| 2026-03-13 | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests — model copies whatever form it reads; wiring tasks are highest-risk for line-length lint spirals due to interpolated routing keys and xcom-style context pulls |
+| 2026-03-13 (pass 1) | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests |
+| 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle for structurally-long call patterns; concrete examples of xcom pulls, routing keys, message dicts |
