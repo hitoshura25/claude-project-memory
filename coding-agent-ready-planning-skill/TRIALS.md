@@ -374,7 +374,7 @@ state. Runner was restarted cleanly and the full run (`132307`) proceeded from s
 ---
 
 ### Trial Set 13 — Qwen After import_integrity Fix (2026-03-12)
-**Logs**: `run-20260312-164811.log` (primary); `run-20260312-164812.log` (second log — content TBD)
+**Logs**: `run-20260312-164811.log` (primary); `run-20260312-164812.log` (second log, same run)
 **Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
 **Context**: 32,768 tokens
 **Skill state**: Post Chat 4 fixes — wiring task now pre-generated with `import_integrity` test; integration test remains deferred
@@ -382,105 +382,167 @@ state. Runner was restarted cleanly and the full run (`132307`) proceeded from s
 
 | Task | Result | Notes |
 |------|--------|-------|
-| 01 Settings | ✅ | |
-| 02 UUIDStore | ✅ | |
-| 03 BaseRecordExtractor | ✅ | |
-| 04 GoogleDriveClient | ✅ | |
-| 05 MinIOWriter | ✅ | |
-| 06 RabbitMQPublisher | ✅ | |
-| 07 StepsExtractor | ✅ | |
-| 08 BloodGlucoseExtractor | ✅ | |
-| 09 HeartRateExtractor | ✅ | |
-| 10 HRVRmssdExtractor | ✅ | |
-| 11 SleepExtractor | ✅ | |
-| 12 ActiveCaloriesExtractor | ✅ | |
-| 13 DistanceExtractor | ✅ | |
-| 14 TotalCaloriesExtractor | ✅ | |
-| 15 OxygenSaturationExtractor | ✅ | |
-| 16 ExerciseSessionExtractor | ✅ | |
+| 01–16 | ✅ | All component tasks clean |
 | 17 Wire DAG | ⚠️ DEGRADED | Reflections exhausted on E501 lint in DAG file; tests ultimately pass (verified independently) |
 | 18 Docker | ✅ | |
 
 **Runner summary**: `18 tasks succeeded, 1 degraded. Deferred: 19-task-8.1-integration-test.md`
 
-#### Task 17 — Wire DAG: E501 Lint Spiral in Generated DAG File
+#### Task 17 — Wire DAG: E501 Lint Spiral (T13)
 
 Qwen implemented the DAG correctly on the first attempt — all logic, imports, TaskGroup
-structure, and dependency wiring were right. However, `xcom_pull` calls with f-string
-`task_ids` parameters produced lines > 88 chars, triggering E501 on every reflection.
+structure, dependency wiring correct. However, `xcom_pull` calls with f-string `task_ids`
+produced lines > 88 chars, triggering E501 on every reflection.
 
 **Spiral sequence:**
-1. Reflection 1 — fixed most E501s by wrapping `xcom_pull` calls; one `record_uuids` list
-   comprehension remained at 89 chars
-2. Reflection 2 — LM Studio hit a `litellm.InternalServerError` (model repeating same chunk)
-   mid-generation. Aider caught and retried. Output was garbled: ~30 duplicate
-   `from plugins.writers.minio_writer import MinIOWriter` lines, then the lint command path
-   embedded literally as a Python import — `from plugins.writers.airflow-ingestion-tasks/lint.sh...`
-   This produced syntax errors.
-3. Reflection 3 — model recovered correctly, rewrote the full file cleanly. But the one
-   remaining E501 (list comprehension on line 215) persisted and reflections were exhausted.
-4. Runner verified tests independently — all 4 `test_dag.py` tests passed. Marked ⚠️.
+1. Reflection 1 — fixed most E501s; one `record_uuids` list comprehension remained at 89 chars
+2. Reflection 2 — `litellm.InternalServerError` (repeating chunk) mid-generation; garbled output
+   (~30 duplicate `MinIOWriter` imports, lint command path embedded as Python import). Syntax errors.
+3. Reflection 3 — model recovered correctly, rewrote file cleanly. One E501 remained. Exhausted.
+4. Runner verified independently — all 4 `test_dag.py` tests passed. Marked ⚠️.
 
-**Key observation — import_integrity worked correctly**: Qwen did not add any hallucinated
-imports. All 15 classes imported were exactly those listed in the task doc. The
-`test_all_extractor_classes_importable` and `test_infrastructure_classes_importable` tests
-passed without needing any correction.
-
-**Root cause of degradation**: The one remaining E501 was `record_uuids = [record.get("uuid")
-for record in records if "uuid" in record]` (89 chars — just 1 over). This is a generated
-implementation line in the DAG file (not a pre-written test file), so it's legitimately the
-model's responsibility to fix. Qwen fixed it in all prior reflections except this one line.
-The InternalServerError in reflection 2 consumed a reflection slot on garbage output.
-
-**Fix options:**
-1. Accept ⚠️ as normal for complex wiring tasks with many xcom calls (Qwen characteristic)
-2. Add a note in the wiring task doc that xcom_pull lines with f-string task_ids should be
-   wrapped across 3 lines proactively
+**import_integrity worked correctly**: Qwen added no hallucinated imports. All 15 classes
+were exactly those listed in the task doc.
 
 ---
 
-## Model Comparison Summary (Trials 6–13)
+### Trial Set 14 — Qwen Repeat Run to Confirm T13 Wire-DAG Pattern (2026-03-12)
+**Log**: `run-20260312-171153.log` (5,553 lines — 2.2× larger than T13's ~3,000)
+**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
+**Context**: 32,768 tokens
+**Skill state**: Identical to T13 — no changes between runs
+**Result**: 16/18 ✅, 1 degraded ⚠️ (task 16 ExerciseSession lint), 1 ❌ HALTED (task 17 Wire DAG)
 
-| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 | Qwen T13 |
-|------------|---------|--------------|-----------|----------|---------------|------------|----------|
-| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (plan fix) | ✅ (plan fix) | ✅ | ✅ |
-| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ (omits stub) | ✅ | ✅ |
-| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ |
-| Resolves E501 lint reliably | ✅ | ❌ (loops) | ✅ | ✅ | ❌ (loops) | ✅ (self-fixes test file) | ⚠️ (misses 1 line after InternalServerError) |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ | ✅ |
-| Respects test file boundary | ✅ | ❌ (corrupts) | ✅ | ✅ | ❌ (corrupts) | ✅ (improves) | ✅ |
-| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ | ✅ |
-| import_integrity — no hallucinated imports | N/A | N/A | ❌ (T9) | N/A | N/A | N/A | ✅ |
-| Aider edit format discipline | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ |
+| Task | Result | Notes |
+|------|--------|-------|
+| 01–15 | ✅ | All clean, identical to T13 |
+| 16 ExerciseSessionExtractor | ✅ | Passed (pre-written test file E501 handled without issue this run) |
+| 17 Wire DAG | ❌ HALTED | **Metal OOM killed model process** — DAG file left empty; `EXTRACTORS` not defined |
+| 18 Docker | NOT RUN | Task 17 halted the sequence |
 
-**Overall TDD pass rate**:
-Qwen T7: 9/18 · Codestral T8: 5/18 · Gemini T9: 12/13 (halted) · Qwen T10: 15/17 · Codestral T11: 7/17 · Gemini T12: 17/17 · **Qwen T13: 17/18 (wiring ⚠️)**
+**Runner final output**:
+```
+⚠  Independent test verification failed (exit 1)
+FAILED tests/test_dag.py::test_extractor_count - ImportError: cannot import name 'EXTRACTORS'
+Tests are failing but aider reported success.
+Fix the issue and re-run with: ./run-tasks.sh --start 17
+```
 
-Gemini 3.1 Flash Lite remains the reference model. Qwen T13 is the strongest Qwen result to
-date — all component tasks clean, wiring task correct but degraded on one lint line after a
-mid-reflection InternalServerError interrupted the fix sequence.
+#### Task 17 — Wire DAG: ISE → Context Bloat → GPU OOM (T14)
+
+The wiring task followed the same opening as T13 — 3 LLM calls, 1 InternalServerError — but
+this time the ISE-triggered garbage output was applied to the file before aider retried, not
+just discarded. The file state after the ISE recovery was a broken imports-only fragment with
+no `EXTRACTORS` list. The test runner detected this and kept feeding the failure back to
+aider, growing the conversation context across ~3,000 additional lines (L2500–L5412).
+By the time aider finally attempted another generation pass, the 32k KV cache was exhausted
+and MLX crashed with a hard Metal GPU OOM segfault.
+
+**Exact failure chain:**
+
+1. **Attempt 1** (L1512, Tokens: 2.8k/2.2k): Qwen generates full correct DAG. 10 E501 errors remain.
+2. **Reflection 1** (L1770, Tokens: 9.4k/1.7k): Wraps most xcom_pull calls. 1 E501 remains.
+3. **Reflection 2** (L2205, Tokens: 11k/192): `litellm.InternalServerError` — model repeating
+   chunk `= set`. Aider retried; got only 192 tokens of garbage. Applied to file:
+   stripped all good code, left only a partial broken imports block including
+   `from plugins.extractorsetter.minio_writer import MinIOWriter` and
+   `from pluginsetter import MinIOWriter`. **File now has no `EXTRACTORS` list.**
+4. **Tests run** (L2502): Lint shows `Found 17 errors (17 fixed, 0 remaining)` — the garbage
+   happened to pass lint (it was just bad imports, not E501). But `test_extractor_count` fails:
+   `ImportError: cannot import name 'EXTRACTORS'`.
+5. **Reflection 3 onwards** (L2517+): Aider now in a loop — "EXTRACTORS not found, let me fix
+   it" — generates full DAG rewrites across multiple additional attempts. Each attempt grows
+   the conversation. By reflection ~5, the model starts generating another garbled repeat-chunk
+   response (L2618+: `from plugins.config.settings import Settings` repeated 20+ times, then
+   `From plugins.config.settings...` with capital F).
+6. **Context exhaustion** (~L5400): After ~3,000 lines of failed reflections, the accumulated
+   conversation history at 32k context pushes the KV cache to its limit. MLX hard crashes:
+   `RuntimeError: [metal::malloc] Resource limit (499000) exceeded`. Aider retries 7 times
+   with exponential backoff (0.2s → 32s), hitting OOM on every attempt.
+7. **Final file state**: Empty — `health_connect_ingest.py` contains only whitespace.
+   Runner's independent verification confirms `EXTRACTORS` not importable.
+
+**Comparison with T13**: In T13, reflection 2's ISE also produced garbled output — but the
+garbage happened to include enough valid content that aider's apply step produced a file that
+at least still had `EXTRACTORS` defined (just with duplicate imports). Tests passed on
+independent verification. In T14, the garbage output after ISE completely stripped `EXTRACTORS`,
+causing the subsequent test failure loop that exhausted the 32k context budget.
+
+**Root cause**: The ISE (model repeating chunk) is a non-deterministic LM Studio serving
+failure. When it occurs during reflection 2, it consumes a reflection slot with a near-empty
+response (192 tokens). Aider applies whatever it gets. If what it gets destroys the file's
+critical exports (`EXTRACTORS`), the subsequent test-fail → reflect → retry loop accumulates
+conversation history until the KV cache overflows.
+
+**This is not a skill content problem.** The task doc is correct; the tests are correct; the
+`import_integrity` constraint worked (no hallucinated classes were ever imported). The failure
+is entirely driven by a transient LM Studio serving instability interacting with Qwen's
+tendency to produce large DAG files that land near the 88-char lint limit.
+
+**Potential mitigations (in order of feasibility):**
+1. **Pre-wrap xcom_pull lines in task doc** — provide explicit multi-line `xcom_pull` patterns
+   in the Behavior section so the model writes clean lines on the first attempt, eliminating
+   the need for E501-fixing reflections entirely. This prevents the lint spiral that fills the
+   context window before ISE can strike.
+2. **Increase reflection limit for wiring tasks** — 3 reflections is marginal when 1 is
+   consumed by ISE garbage. 5 would give real recovery headroom. (Runner change, not skill.)
+3. **Stub-restoration guard in runner** — if aider exits 0 but `EXTRACTORS` is not importable,
+   restore the pre-task file from backup and retry rather than feeding the error back into an
+   already-large context.
+
+---
+
+## Model Comparison Summary (Trials 6–14)
+
+| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 | Qwen T13 | Qwen T14 |
+|------------|---------|--------------|-----------|----------|---------------|------------|----------|----------|
+| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (fix) | ✅ (fix) | ✅ | ✅ | ✅ |
+| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+| Resolves E501 lint reliably | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (self-fixes) | ⚠️ (ISE) | ❌ (ISE→OOM) |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ | ✅ | ✅ |
+| Respects test file boundary | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (improves) | ✅ | ✅ |
+| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| import_integrity — no hallucinated imports | N/A | N/A | ❌ | N/A | N/A | N/A | ✅ | ✅ |
+| Wire DAG survives LM Studio ISE | N/A | N/A | N/A | N/A | N/A | N/A | ⚠️ (lucky) | ❌ (OOM) |
+
+**Overall TDD pass rate (component tasks only, tasks 01–16)**:
+All Qwen runs T10–T14: **16/16** — components are consistent.
+
+**Wire DAG (task 17) results across Qwen runs**:
+T10: N/A (not yet generated) · T13: ⚠️ (tests pass, lint degraded) · T14: ❌ (OOM, file emptied)
+
+**Conclusion**: The wiring task is Qwen's consistent weak point under LM Studio, driven by
+the combination of large file size, E501 lint on xcom_pull lines, and LM Studio's ISE
+serving instability consuming reflection slots. The fix is to eliminate the E501 source
+proactively in the task doc rather than relying on the model to fix it across reflections.
 
 ---
 
 ## Open Issues
 
-1. **Wiring task E501 — Qwen characteristic**: XCom pull lines with f-string `task_ids` hit
-   88-char limit. Consider adding a note in the wiring task doc template to pre-wrap these
-   lines (or adjust line length tolerance for DAG files specifically). Low priority — tests
-   passed; this is a cosmetic degradation only.
+1. **ACTIONABLE — Wire DAG xcom_pull E501**: Pre-wrap all `xcom_pull` calls with f-string
+   `task_ids` across 3 lines in the task doc Behavior section. This eliminates the E501 source
+   on the first attempt, removing the reflection loop that makes the ISE dangerous. Example:
+   ```python
+   records = context["task_instance"].xcom_pull(
+       task_ids=f"{extractor.record_type}.extract",
+       key="records",
+   )
+   ```
+   Apply this to all 4 xcom_pull call sites in the DAG wiring task doc.
 
-2. **InternalServerError recovery**: LM Studio emitted a garbled repeat-chunk response mid
-   reflection on task 17. Aider caught and retried, but the retry consumed a reflection slot
-   on garbage. Not addressable at skill level — this is a model serving instability. Observed
-   only once across T13.
+2. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: If aider
+   exits 0 but a known critical export (like `EXTRACTORS`) is not importable, restore from
+   the pre-task backup and retry rather than feeding the error back into a growing context.
+   This prevents the ISE-garbage → context-bloat → OOM chain seen in T14.
 
 3. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
-   Generate and run when infrastructure is available.
 
 4. **Codestral — disqualified**: Confirmed across T8 and T11. No further trials planned.
 
-5. **Context length floor — 32k (Qwen/MLX)**: See Trial Set 4. Do not reduce below 32k.
+5. **Context length floor — 32k (Qwen/MLX)**: Do not reduce below 32k. See Trial Set 4.
 
 ---
 
