@@ -469,15 +469,15 @@ in the Behavior section — the model copies whatever form it reads.
 
 ## Open Issues
 
-1. **IN PROGRESS — Wire DAG xcom_pull E501**: Two skill updates applied (2026-03-13).
-   First pass added the pre-wrap principle to Core Principles and Wiring Task Tests.
-   Second pass (after verifying generated task doc) tightened the rule: now explicitly
-   requires **code snippets, not prose** for callable bodies in wiring task Behavior
-   sections, with concrete examples of xcom pulls, routing keys, and message dicts.
-   The "interface contracts, not implementation code" principle now has an explicit
-   exception carved out for wiring task call patterns that will structurally exceed
-   the line limit. Regenerate task docs to verify the updated rule produces correctly
-   wrapped Behavior sections.
+1. **IN PROGRESS — Wire DAG callable body snippets (pass 3 applied 2026-03-14)**:
+   Three skill update passes applied to `writing-guide.md`. Root cause of partial
+   application in pass 2: the rule was still conditional ("use snippets when you predict
+   the line will be long"), so Claude Code applied it to obvious cases (multi-key dicts)
+   but not borderline ones (simple two-argument xcom_pull). Pass 3 removes the
+   length-prediction gate entirely: wiring task Behavior sections must use code snippets
+   for **all callable bodies**, unconditionally, no length judgement required. The
+   "interface contracts, not implementation code" Core Principle now has an explicit
+   carve-out for wiring task callables. Regenerate and verify.
 
 2. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: If aider
    exits 0 but a known critical export (like `EXTRACTORS`) is not importable, restore from
@@ -522,4 +522,5 @@ in the Behavior section — the model copies whatever form it reads.
 | 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks no longer deferred; `import_integrity` scenario mandatory; only integration tests remain deferred |
 | 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section added; Layer 1 skipped for wiring; Layer 2 = import integrity check against actual files; manifest examples updated |
 | 2026-03-13 (pass 1) | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests |
-| 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle for structurally-long call patterns; concrete examples of xcom pulls, routing keys, message dicts |
+| 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle |
+| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — snippet rule is now unconditional for all wiring task callable bodies; explains why prediction is unreliable and why even short-looking calls should use snippets |
