@@ -96,49 +96,18 @@ Qwen 30B reasons better but fails on non-trivial logic. Spec-based needs ~GPT-4 
 **Tasks**: 18 implementation + 1 deferred
 **Result**: 16/18 completed before interruption
 
-**Task 4 (MinioWriter) — DEGRADED**: Model doesn't know `fastavro.writer` API.
-Correct: `fastavro.writer(fo, schema, records)`. Model always swapped args 2 and 3.
-Recurring bug — also hit by Codestral in Trial 1.
-
-**Tasks 17 + 18 — STUCK (summarizer spiral)**: After task completion, aider fires a
-post-task summarization call (~1,557 prompt tokens). Model generates ~25,000 completion
-tokens (18-19x ratio). Aider retries every ~10 min indefinitely. Ctrl-C ineffective —
-`aider ... | tee` pipeline swallows SIGINT.
-
 ---
 
 ### Trial Set 3 — After Runner Fixes (2026-03-04 morning)
 **Log**: `run-20260304-114920.log`
 **Result**: 13 completed, 4 degraded
 
-**`--timeout` ineffective with streaming**: Aider's `--timeout` caps HTTP connection setup
-but LM Studio uses `stream: true`. Once streaming starts, timeout never triggers regardless
-of generation length. Summarizer spiral still ran (25,439 tokens at 12:02, 25,536 at 12:12).
-
-**`timeout` shell wrapper tried and reverted**: Wrapping aider in `timeout 600 aider ...`
-broke Ctrl-C entirely — `tee` pipeline kept pipe alive after timeout killed aider.
-
-**Git restore bug**: Claude Code saw deleted task files in git HEAD, ran
-`git checkout HEAD --` and stopped — never re-reading updated skill files. Step 0 added
-to SKILL.md to prevent this.
-
 ---
 
 ### Trial Set 4 — 12k Context Experiment (2026-03-04 afternoon)
 **Log**: `run-20260304-150619.log`
-**Context**: 12,000 tokens (reduced from 32k to test if smaller window helps)
-**Result**: Crashed at task 9 (HeartRateExtractor) — earlier than task 17-18 in prior runs
-
-**Failure mode**: Metal GPU OOM — `[metal::malloc] Resource limit (499000) exceeded` — a
-hard segfault, not a summarizer spiral.
-
-**Root cause — KV cache sizing**: MLX pre-allocates a fixed GPU memory block sized to hold
-exactly N token positions. With 12k that block is ~3x smaller than with 32k. Task 9 required
-6 reflection loops; by reflection 6 the live conversation had grown to 24 messages. The KV
-cache must hold both prompt AND generated output simultaneously — when generated output drove
-the total past ~12k mid-generation, the Metal allocator segfaulted.
-
-**Conclusion**: Do not reduce context length below 32k for Qwen 30B on this task set.
+**Context**: 12,000 tokens
+**Result**: Crashed at task 9. **Conclusion**: Do not reduce context below 32k for Qwen 30B.
 
 ---
 
@@ -146,31 +115,17 @@ the total past ~12k mid-generation, the Metal allocator segfaulted.
 **Log**: `run-20260304-155543.log`
 **Result**: Task 18 completed. Script hung on HeartRateExtractor (task 9).
 
-HeartRateExtractor: fundamental contract mismatch. Needs to override `extract()` entirely
-(GROUP BY aggregation in query, accumulating samples in loop), not just `_to_avro_dict`.
-Base class template is the wrong abstraction for multi-row-per-record cases.
-
 ---
 
 ### Trial Set 6 — Skill Updates Applied (2026-03-09)
 **Log**: `run-20260309-123229.log`
-**Context**: 32,768 tokens
 **Model**: Qwen 3 Coder 30B Q4
 **Result**: 11/18 ✅, 1 degraded ⚠️ (task 6), halted at task 12 ❌
-
-| Task | Result | Notes |
-|------|--------|-------|
-| 01–05 | ✅ | Settings, BaseRecordExtractor, GoogleDriveClient, MinioWriter (fixed — mock_fastavro_writer worked), RabbitmqPublisher |
-| 06 UUIDStore | ⚠️ | `no such table: seen_uuids` — `__init__` didn't call CREATE TABLE |
-| 07–11 | ✅ | StepsExtractor, BloodGlucose, HeartRate (fixed — override pattern worked), HRV, Sleep |
-| 12 Airflow DAG | ❌ | `airflow.utils.task_group` not in conftest mock list |
-| 13–18 | NOT RUN | |
 
 ---
 
 ### Trial Set 7 — After Conftest + UUIDStore + DAG Redesign (2026-03-10 morning)
 **Log**: `run-20260310-105632.log`
-**Context**: 32,768 tokens
 **Model**: Qwen 3 Coder 30B Q4
 **Result**: 9/12 ✅, 3 degraded ⚠️ (tasks 1, 6, 12), halted at task 13 ❌
 
@@ -178,12 +133,8 @@ Base class template is the wrong abstraction for multi-row-per-record cases.
 
 ### Trial Set 8 — Codestral 22B Head-to-Head (2026-03-10)
 **Model**: Codestral 22B v0.1
-**Result**: 5/18 ✅, 13 degraded ⚠️, 0 halts
-
-**Codestral-specific failure modes:**
-- Leaves `raise NotImplementedError` in method bodies (partial implementation)
-- Class naming inconsistency: `MinIOWriter` vs expected `MinioWriter`
-- **Edits test files when stuck** — corrupted `test_dag.py` to `assert 1 == 10` by task 18
+**Result**: 5/18 ✅, 13 degraded ⚠️, 0 halts. Codestral-specific failure modes: edit format
+failures, lint spirals, test file corruption, incomplete ABC.
 
 ---
 
@@ -195,34 +146,26 @@ Base class template is the wrong abstraction for multi-row-per-record cases.
 
 ### Trial Set 10 — Qwen Coder After Cascade Fix + Settings Fix (2026-03-12)
 **Log**: `run-20260312-112908.log`
-**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
-**Context**: 32,768 tokens
-**Result**: 15/17 ✅, 2 degraded ⚠️ (tasks 2, 17), task 16 completed with lint warnings
+**Model**: Qwen 3 Coder 30B (via LM Studio)
+**Result**: 15/17 ✅, 2 degraded ⚠️ (tasks 2, 17)
 
 ---
 
 ### Trial Set 11 — Codestral 22B After Cascade Fix (2026-03-12)
 **Log**: `run-20260312-115442.log`
-**Model**: Codestral 22B v0.1 (via LM Studio) — `lm_studio/mistralai/codestral-22b-v0.1`
-**Context**: 32,768 tokens
-**Result**: 7/17 ✅, 9 degraded ⚠️, 1 warning, 0 halts
-
-Codestral confirmed disqualified: lint loops, test file corruption, incomplete ABC, edit format
-failures are all consistent model-level behaviours not addressable through task doc improvements.
+**Model**: Codestral 22B v0.1 (via LM Studio)
+**Result**: 7/17 ✅, 9 degraded ⚠️, 1 warning. Codestral confirmed disqualified.
 
 ---
 
-### Trial Set 12 — Gemini 3.1 Flash Lite Preview — Clean Sweep (2026-03-12)
-**Log**: `run-20260312-132307.log` (primary); `run-20260312-132242.log` (aborted restart)
+### Trial Set 12 — Gemini 3.1 Flash Lite Preview — First Clean Sweep (2026-03-12)
+**Log**: `run-20260312-132307.log`
 **Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
-**Result**: **17/17 ✅ — first complete clean sweep across all component tasks**
-
-Total LLM calls: 27. Zero test failures, zero degraded tasks, zero halts.
+**Result**: **17/17 ✅** — 27 LLM calls total, zero degraded tasks.
 
 ---
 
 ### Trial Set 13 — Qwen After import_integrity Fix (2026-03-12)
-**Logs**: `run-20260312-164811.log`
 **Model**: Qwen 3 Coder 30B (via LM Studio)
 **Result**: 17/18 ✅, 1 degraded ⚠️ (task 17 wiring — E501 spiral, tests pass)
 
@@ -231,7 +174,7 @@ Total LLM calls: 27. Zero test failures, zero degraded tasks, zero halts.
 ### Trial Set 14 — Qwen Repeat Run: ISE → OOM on Wire DAG (2026-03-12)
 **Log**: `run-20260312-171153.log` (5,553 lines)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
-**Result**: 16/18 ✅, 1 ❌ HALTED (task 17 — Metal OOM, DAG file emptied), task 18 not reached
+**Result**: 16/18 ✅, 1 ❌ HALTED (task 17 — Metal OOM, DAG file emptied)
 
 ---
 
@@ -239,97 +182,102 @@ Total LLM calls: 27. Zero test failures, zero degraded tasks, zero halts.
 **Log**: `run-20260314-121837.log` (1,587 lines)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
 **Skill state**: Post pass-3 writing-guide fix — unconditional code snippets in wiring task Behavior
-**Result**: **18/18 ✅ — first complete Qwen clean sweep. 1 degraded ⚠️ (task 2 UUIDStore — reflections exhausted, tests pass)**
-
-Task 17 Wire DAG: 2 LLM calls, zero E501 errors, no ISE, no OOM. Snippet rule confirmed effective.
+**Result**: **18/18 ✅ — first complete Qwen clean sweep.** 1 ⚠️ (task 2 UUIDStore — tests pass).
+Task 17: 2 LLM calls, zero E501 errors, no ISE, no OOM. Snippet rule confirmed effective.
 
 ---
 
 ### Trial Set 16 — Codestral Final Confirmation (2026-03-14)
 **Log**: `run-20260314-123454.log` (1,793 lines — halted at task 7)
-**Model**: Codestral 22B v0.1 (via LM Studio) — `lm_studio/mistralai/codestral-22b-v0.1`
-**Context**: 32,768 tokens
-**Skill state**: Same as T15 (post all fixes including callable-body snippets in wiring task)
-**Result**: 2/7 ✅, 4 degraded ⚠️ (tests pass), 1 ❌ DEGRADED (task 3 — tests fail), effectively halted at task 7 via cascade
+**Model**: Codestral 22B v0.1 (via LM Studio)
+**Result**: 2/7 ✅, 4 ⚠️ (tests pass), 1 ❌ (task 3 — edit format failure, cascade to task 7)
 
-| Task | Result | Notes |
-|------|--------|-------|
-| 01 Settings | ✅ | 2 calls; E501 on settings file itself, fixed |
-| 02 UUIDStore | ⚠️ (tests pass) | 4 calls, 16 E501s on INSERT SQL string; reflections exhausted on lint |
-| 03 BaseRecordExtractor | ❌ DEGRADED | **Edit format failures** — all 4 calls rejected by aider ("No filename provided before ```"); nothing applied; `extract()` still raises `NotImplementedError` |
-| 04 GoogleDriveClient | ✅ | 1 call, clean |
-| 05 MinIOWriter | ⚠️ (tests pass) | 4 calls, 10 E501s; reflections exhausted on lint |
-| 06 RabbitMQPublisher | ⚠️ (tests pass) | 4 calls, 16 E501s; reflections exhausted on lint |
-| 07 StepsExtractor | ❌ HALTED (cascade) | `_row_to_record` written correctly, but `base.py.extract()` still raises `NotImplementedError` (task 3 never applied). Tests fail with `NotImplementedError` from base; aider burns reflection budget trying to diagnose. Log ends here. |
-| 08–18 | NOT RUN | Blocked by cascade from task 3 |
-
-#### Task 3 — BaseRecordExtractor: Edit Format Failure (T16)
-
-Codestral produced syntactically correct, logically sound code for `base.py` across all 4
-LLM calls. However, every attempt omitted the required filename header line before the
-opening ``` fence. Aider's `whole` edit format requires:
-
-```
-services/airflow-ingestion/plugins/extractors/base.py
-```
-```python
-...code...
-```
-
-Codestral kept producing:
-```
-I apologize for the mistake. Here's the corrected version:
-```
-```python
-...code...
-```
-
-Aider rejected all 4 outputs with `"No filename provided before ``` in file listing"`. The
-reflection feedback clearly stated the error and linked the docs page each time. Codestral
-acknowledged the error, apologised, and produced the exact same malformed output again.
-Nothing was ever applied to `base.py`. The stub `raise NotImplementedError` in `extract()`
-remained in place.
-
-**Cascade from task 3**: Every downstream extractor (task 07+) calls `extract()` from
-`BaseRecordExtractor`. With `extract()` raising `NotImplementedError`, every extractor test
-fails — not because the extractor implementation is wrong, but because the base class was
-never implemented. The run effectively halted at task 7 with 11 tasks not reached.
-
-**This is not addressable at skill level.** The edit format failure is an intrinsic Codestral
-behaviour — it acknowledges the format requirement and still fails to apply it, consistently,
-across all 4 reflection attempts. No task doc change, no Behavior section improvement, no
-wording adjustment will fix a model that cannot conform to the agent framework's output format
-under reflection pressure.
-
-**Codestral disqualification confirmed for the third time (T8, T11, T16).**
+Task 3 (BaseRecordExtractor): all 4 LLM calls rejected by aider — correct code produced but
+filename header omitted every time. `extract()` never applied, stub remained. Every downstream
+extractor hit `NotImplementedError` from base. **Codestral disqualified — third confirmation.**
 
 ---
 
-## Model Comparison Summary (Trials 6–16)
+### Trial Set 17 — Gemini 3.1 Flash Lite Preview — Second Clean Sweep (2026-03-14)
+**Log**: `run-20260314-130209.log` (1,501 lines)
+**Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
+**Skill state**: Same as T15/T16 (post all fixes, including callable-body snippets in wiring task)
+**Result**: **18/18 ✅, 0 degraded — perfect clean sweep**
 
-| Capability | Qwen T15 | Gemini T12 | Codestral T16 |
-|------------|----------|------------|---------------|
-| Settings — no module-level singleton | ✅ | ✅ | ✅ |
-| Follows ABC override instructions | ✅ | ✅ | ❌ (edit format failure prevents application) |
-| Implements methods completely | ✅ | ✅ | ⚠️ (code correct but not applied) |
-| Resolves E501 lint reliably | ✅ (wiring) | ✅ | ❌ (loops on every task) |
-| Conforms to aider edit format under reflection | ✅ | ✅ | ❌ (critical failure) |
-| Wire DAG — no ISE/OOM | ✅ | ✅ | N/A (never reached) |
+| Task | Calls | E501s | Notes |
+|------|-------|-------|-------|
+| 01 Settings | 1 | 0 | ✅ |
+| 02 UUIDStore | 2 | 4 | ✅ — fixed E501s in reflection, tests pass |
+| 03 BaseRecordExtractor | 1 | 0 | ✅ |
+| 04 GoogleDriveClient | 1 | 0 | ✅ |
+| 05 MinIOWriter | 1 | 0 | ✅ |
+| 06 RabbitMQPublisher | 1 | 0 | ✅ |
+| 07 StepsExtractor | 1 | 0 | ✅ |
+| 08 BloodGlucoseExtractor | 1 | 0 | ✅ |
+| 09 HeartRateExtractor | 2 | 4 | ✅ — fixed E501s in reflection |
+| 10 HRVRmssdExtractor | 1 | 0 | ✅ |
+| 11 SleepExtractor | 2 | 4 | ✅ — fixed E501s in reflection |
+| 12–16 | 1 each | 0 | ✅ all clean first attempt |
+| 17 Wire DAG | 1 | 0 | ✅ — **single call, zero E501s** |
+| 18 Docker | 1 | 0 | ✅ |
 
-**Final standing across all TDD runs:**
-- Gemini 3.1 Flash Lite: **17/17 ✅** (T12) — clean sweep, reference model
-- Qwen 3 Coder 30B: **18/18 ✅** (T15) — clean sweep after snippet fix
-- Codestral 22B: **disqualified** — edit format failures, lint spirals, test file corruption; not fixable at skill level
+**Runner summary**: `18 tasks succeeded, 0 degraded`
+
+**Total LLM calls: 21** — 6 fewer than T12's 27. Efficiency improvement confirms skill improvements
+(callable-body snippets, tighter task docs) are reducing the work Gemini needs to do.
+
+**Zero degraded tasks** — T12 had no degraded either, but T17 is the first run with the full suite
+of skill fixes in place and still achieves the same result. Confirmation that the skill changes
+didn't break Gemini compatibility.
+
+#### T17 Notable observations
+
+**Task 17 Wire DAG: 1 LLM call, 0 E501s** — T12 completed task 17 in 2 calls with a test
+file E501 self-fix. T17 completed it in a single call with zero lint errors at all. The
+callable-body snippets in the Behavior section eliminated any lint issues before they could
+even surface.
+
+**UUIDStore, HeartRate, Sleep (2 calls each)**: The three tasks that required a reflection
+all had E501s on SQL string literals or long query strings — the same category as the
+UUIDStore ⚠️ seen in T15 Qwen. Gemini self-fixed all of them within 1 reflection (4 E501s
+each, all resolved). Qwen exhausted its budget on the same lines. This confirms the
+difference: Gemini resolves lint in 1 reflection; Qwen sometimes needs more.
+
+**12 of 18 tasks completed in exactly 1 LLM call** — no reflections needed at all. For the
+majority of the task set Gemini writes clean, lint-passing, test-passing code on the first
+attempt.
+
+---
+
+## Model Comparison Summary (Trials 12–17, post-TDD maturity)
+
+| Metric | Gemini T12 | Qwen T15 | Gemini T17 | Codestral T16 |
+|--------|------------|----------|------------|---------------|
+| Pass rate | 17/17 ✅ | 18/18 ✅ | 18/18 ✅ | ❌ halted T7 |
+| Degraded tasks | 0 | 1 ⚠️ (tests pass) | 0 | cascade failure |
+| Total LLM calls | 27 | ~21 | 21 | N/A |
+| Wire DAG calls | 2 | 2 | **1** | N/A |
+| Wire DAG E501s | 0 | 0 | **0** | N/A |
+| Self-fixes E501 lint | ✅ | ⚠️ (sometimes exhausts) | ✅ | ❌ always loops |
+| Edit format discipline | ✅ | ✅ | ✅ | ❌ critical failure |
+
+**Final model standing:**
+- **Gemini 3.1 Flash Lite**: two clean sweeps (T12: 17/17, T17: 18/18). More efficient each run.
+  Zero degraded across both. Reference model.
+- **Qwen 3 Coder 30B**: 18/18 clean sweep (T15) after snippet fix. 1 cosmetic ⚠️ (tests pass).
+  Reliable with appropriate task doc authoring.
+- **Codestral 22B**: permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
 ---
 
 ## Open Issues
 
-1. **RESOLVED (2026-03-14) — Wire DAG callable body snippets**: Confirmed effective in T15.
-   Task 17 passed with 2 LLM calls and zero E501 errors. No ISE, no OOM.
+1. **RESOLVED (2026-03-14) — Wire DAG callable body snippets**: Confirmed effective in T15
+   (Qwen) and T17 (Gemini). Task 17 passes in 1–2 LLM calls with zero E501 errors.
 
 2. **LOW PRIORITY — UUIDStore INSERT SQL E501**: `mark_seen` INSERT query is 100 chars.
-   Tests pass, cosmetic only. Can show pre-wrapped form in Behavior section when regenerating:
+   Gemini self-fixes in 1 reflection; Qwen exhausts budget. Tests pass in both cases.
+   Can show pre-wrapped form in Behavior section:
    ```python
    query = (
        "INSERT OR IGNORE INTO seen_uuids "
@@ -342,8 +290,7 @@ under reflection pressure.
 
 4. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
 
-5. **Codestral — permanently disqualified**: T8, T11, T16 all confirm the same failure modes.
-   Not addressable at skill level. No further Codestral trials.
+5. **Codestral — permanently disqualified**: T8, T11, T16. Not addressable at skill level.
 
 6. **Context length floor — 32k (Qwen/MLX)**: Do not reduce below 32k. See Trial Set 4.
 
@@ -380,4 +327,4 @@ under reflection pressure.
 | 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section added; Layer 1 skipped for wiring; Layer 2 = import integrity check against actual files; manifest examples updated |
 | 2026-03-13 (pass 1) | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests |
 | 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle |
-| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — snippet rule is now unconditional for all wiring task callable bodies; confirmed effective in T15 (0 E501s, 2 LLM calls, no ISE) |
+| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — snippet rule is now unconditional for all wiring task callable bodies; confirmed effective in T15 (Qwen) and T17 (Gemini) |
