@@ -166,14 +166,6 @@ Base class template is the wrong abstraction for multi-row-per-record cases.
 | 12 Airflow DAG | ❌ | `airflow.utils.task_group` not in conftest mock list |
 | 13–18 | NOT RUN | |
 
-**Task 6 root cause**: Mutation gate stub already had CREATE TABLE — couldn't detect missing
-call. Fix: stub must deliberately omit schema init so tests catch the omission.
-
-**Task 12 root cause**: `airflow.utils` registered in sys.modules but not `airflow.utils.task_group`.
-Python sees the parent as a MagicMock object (not a package) — importing a submodule fails.
-Fix: every dotted path prefix must be registered separately. Conftest must be verified with a
-bare import before task docs are generated.
-
 ---
 
 ### Trial Set 7 — After Conftest + UUIDStore + DAG Redesign (2026-03-10 morning)
@@ -181,22 +173,6 @@ bare import before task docs are generated.
 **Context**: 32,768 tokens
 **Model**: Qwen 3 Coder 30B Q4
 **Result**: 9/12 ✅, 3 degraded ⚠️ (tasks 1, 6, 12), halted at task 13 ❌
-
-| Task | Result | Notes |
-|------|--------|-------|
-| 01 Settings | ⚠️ | Module-level `settings = Settings()` — ValidationError at import |
-| 02–05 | ✅ | |
-| 06 UUIDStore | ⚠️ | Still `no such table` — multi-connection `:memory:` trap (each connect creates new DB) |
-| 07–11 | ✅ | |
-| 12 Airflow DAG | ⚠️ | `_extract_and_ingest` defined as closure despite task doc specifying module-level |
-| 13 ActiveCaloriesExtractor | ❌ HALTED | Implementation correct but `test_dag.py` broken from task 12 — **cascade** |
-| 14–18 | NOT RUN | Blocked |
-
-**Cascade analysis (task 13)**: ActiveCalories implementation was correct — it was halted
-because its test_command included `test_dag.py`, which was broken from task 12. This is the
-critical structural problem: extractor tasks had inline DAG wiring steps, meaning `test_dag.py`
-was gated in every extractor's command. A single broken DAG task cascades to all downstream
-extractors regardless of their individual correctness.
 
 ---
 
@@ -209,33 +185,11 @@ extractors regardless of their individual correctness.
 - Class naming inconsistency: `MinIOWriter` vs expected `MinioWriter`
 - **Edits test files when stuck** — corrupted `test_dag.py` to `assert 1 == 10` by task 18
 
-**Where Codestral beats Qwen**: Task 6 (UUIDStore) — used persistent `self._conn` correctly.
-**Where Qwen beats Codestral**: Tasks 3, 4, 5, 7, 9, 11 — better naming discipline, no stubs left.
-
 ---
 
 ### Trial Set 9 — Gemini 2.0 Flash Lite Head-to-Head (2026-03-10 afternoon)
 **Model**: `gemini/gemini-2.0-flash-lite-preview` (Gemini API)
 **Result**: 12/13 ✅, 1 degraded ⚠️ (task 13), halted at task 14 ❌
-
-| Task | Qwen T7 | Codestral T8 | Gemini T9 | Notes |
-|------|---------|--------------|-----------|-------|
-| 01 Settings | ⚠️ | ⚠️ | ✅ | Gemini: LazySettings proxy with @cached_property, self-diagnosed |
-| 02–05 | ✅ | mixed | ✅ | |
-| 06 UUIDStore | ⚠️ | ✅ | ✅ | Gemini: self._conn persistent connection |
-| 07–11 | ✅ | mixed | ✅ | |
-| 12 Airflow DAG | ⚠️ | ⚠️ | ✅ | Gemini: first model to pass — but added hallucinated import |
-| 13 ActiveCaloriesExtractor | ❌ | ⚠️ | ⚠️ | Gemini: correct impl; cascaded from hallucinated DAG import |
-| 14–18 | NOT RUN | mixed | NOT RUN | |
-
-**Task 12 — Gemini passed but hallucinated**: Added `from plugins.extractors.sleep_session_extractor
-import SleepSessionExtractor` — a module that doesn't exist. Task 12's test suite passed
-(count was 5 including the hallucinated class). Surfaced at task 13 full-suite collection.
-
-**Root cause of all T6-T9 cascades**: Every extractor task had an inline `Modify: dags/...`
-step and `test_dag.py` in its `test_command`. When the DAG task degraded, all downstream
-extractors failed their gates regardless of their own correctness. This is a structural plan
-problem, not a model capability problem.
 
 ---
 
@@ -243,48 +197,7 @@ problem, not a model capability problem.
 **Log**: `run-20260312-112908.log`
 **Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
 **Context**: 32,768 tokens
-**Skill state**: Post cascade-fix (component/wiring separation) + post settings fix (no module-level singleton in interface contracts)
 **Result**: 15/17 ✅, 2 degraded ⚠️ (tasks 2, 17), task 16 completed with lint warnings
-
-| Task | Result | Notes |
-|------|--------|-------|
-| 01 Settings | ✅ | **Fixed** — no module-level instantiation. Passed cleanly first attempt. |
-| 02 UUIDStore | ⚠️ DEGRADED | New SQL bug — see below |
-| 03 BaseRecordExtractor | ✅ | |
-| 04 GoogleDriveClient | ✅ | |
-| 05 MinIOWriter | ✅ | |
-| 06 RabbitMQPublisher | ✅ | |
-| 07–11 | ✅ | All 5 extractors (Steps, BloodGlucose, HeartRate, HRV, Sleep) |
-| 12–15 | ✅ | All 4 secondary extractors (ActiveCalories, Distance, TotalCalories, OxygenSaturation) |
-| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; aider exhausted reflections on E501 lint in pre-written test file |
-| 17 Docker | ⚠️ DEGRADED | No test_command — degraded due to UUIDStore full-suite leak |
-
-**Cascade isolation confirmed**: Tasks 07–16 all passed with `test_command` scoped to their
-own test files only. UUIDStore's broken state did NOT cascade to any extractor.
-
-**Settings fix confirmed**: Task 01 passed on first attempt with no module-level instantiation.
-
-#### Task 02 — UUIDStore: SQLite Multi-Column IN Clause
-
-**Error**: `sqlite3.OperationalError: IN(...) element has 1 term - expected 2`
-
-**Root cause**: Model used `WHERE (uuid_hex, record_type) IN (?, ?, ?, ?)` — a multi-column
-row-value constructor that SQLite does not support. All 3 reflections tried variations of the
-same flattened-params approach; none escaped the pattern.
-
-**Correct approach**: Single-column IN with `AND record_type = ?`:
-```python
-placeholders = ','.join('?' * len(uuids))
-query = f"SELECT uuid_hex FROM seen_uuids WHERE uuid_hex IN ({placeholders}) AND record_type = ?"
-cursor = self._conn.execute(query, [*uuids, record_type])
-```
-
-**Fix needed**: Task doc Behavior section must provide this SQL pattern explicitly.
-
-#### Task 17 — Docker: UUIDStore Full-Suite Leak
-
-Runner ran full suite for verification (no `test_command`), picked up 7 failing UUIDStore
-tests. Docker files were likely generated correctly — this is a verification artifact.
 
 ---
 
@@ -292,28 +205,7 @@ tests. Docker files were likely generated correctly — this is a verification a
 **Log**: `run-20260312-115442.log`
 **Model**: Codestral 22B v0.1 (via LM Studio) — `lm_studio/mistralai/codestral-22b-v0.1`
 **Context**: 32,768 tokens
-**Skill state**: Same as T10 — post cascade-fix + post settings fix
 **Result**: 7/17 ✅, 9 degraded ⚠️, 1 warning, 0 halts
-
-| Task | Result | Notes |
-|------|--------|-------|
-| 01 Settings | ✅ | Passed — settings fix holds for Codestral too |
-| 02 UUIDStore | ⚠️ DEGRADED | **Lint spiral** — correct SQL logic but E501 on INSERT string literal; all 3 reflections spent on line-length, never ran tests |
-| 03 BaseRecordExtractor | ⚠️ DEGRADED | Lint spiral — E501 on list comprehension in `extract()`; exit 5 (no tests ran) |
-| 04 GoogleDriveClient | ⚠️ DEGRADED | **Edit format failure** — when stuck on `no tests ran`, produced prose + command; aider rejected non-conforming output; exit 5 |
-| 05 MinIOWriter | ⚠️ DEGRADED | Lint spiral — E501 on `__init__` signature; exit 5 |
-| 06 RabbitMQPublisher | ⚠️ DEGRADED | **Test file corruption** — replaced entire test file with `# ... rest of the test code ...` stub; exit 5 |
-| 07 StepsExtractor | ✅ | |
-| 08 BloodGlucoseExtractor | ✅ | |
-| 09 HeartRateExtractor | ⚠️ DEGRADED | **ABC not implemented** — overrode `extract()` but omitted `_row_to_record()` stub; `Can't instantiate abstract class` |
-| 10 HRVRmssdExtractor | ✅ | |
-| 11 SleepExtractor | ⚠️ DEGRADED | Same as task 09 — `_row_to_record()` missing |
-| 12 ActiveCaloriesExtractor | ✅ | |
-| 13 DistanceExtractor | ⚠️ DEGRADED | Test file corruption — `# ... rest of the code...` stub; exit 5 |
-| 14 TotalCaloriesExtractor | ✅ | |
-| 15 OxygenSaturationExtractor | ⚠️ DEGRADED | Test file corruption — `# ... rest of the code...` stub; exit 5 |
-| 16 ExerciseSessionExtractor | ✅ (⚠️ lint) | Tests pass; E501 lint in pre-written test file |
-| 17 Docker | ⚠️ DEGRADED | UUIDStore full-suite leak |
 
 Codestral confirmed disqualified: lint loops, test file corruption, incomplete ABC, edit format
 failures are all consistent model-level behaviours not addressable through task doc improvements.
@@ -323,186 +215,135 @@ failures are all consistent model-level behaviours not addressable through task 
 ### Trial Set 12 — Gemini 3.1 Flash Lite Preview — Clean Sweep (2026-03-12)
 **Log**: `run-20260312-132307.log` (primary); `run-20260312-132242.log` (aborted restart)
 **Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
-**Skill state**: Same as T10/T11 — post cascade-fix + post settings fix. No additional task doc changes since T10.
 **Result**: **17/17 ✅ — first complete clean sweep across all component tasks**
 
-| Task | Result | Notes |
-|------|--------|-------|
-| 01 Settings | ✅ | |
-| 02 UUIDStore | ✅ | **SQL pattern correct on first attempt** — `WHERE record_type = ? AND uuid_hex IN (...)` with `[record_type] + uuids` params; single-column IN, no row-value constructor |
-| 03 BaseRecordExtractor | ✅ | |
-| 04 GoogleDriveClient | ✅ | |
-| 05 MinIOWriter | ✅ | |
-| 06 RabbitMQPublisher | ✅ | |
-| 07–08 | ✅ | StepsExtractor, BloodGlucoseExtractor |
-| 09 HeartRateExtractor | ✅ | Override pattern followed correctly; 2 reflections |
-| 10 HRVRmssdExtractor | ✅ | |
-| 11 SleepExtractor | ✅ | Override pattern followed correctly; 2 reflections |
-| 12–15 | ✅ | ActiveCalories, Distance, TotalCalories, OxygenSaturation |
-| 16 ExerciseSessionExtractor | ✅ | **Fixed E501 in pre-written test file** — rewrote `CREATE TABLE` string splits and INSERT line across lines; 2 reflections; 4 tests pass |
-| 17 Docker | ✅ | 89 tests pass in full-suite verification; no UUIDStore leak |
-
-**Total LLM calls across entire run**: 27 (including all reflections). Extremely efficient.
-
-**Zero test failures, zero degraded tasks, zero halts.**
-
----
-
-#### T12 Notable Behaviours
-
-**UUIDStore SQL — immediate correct pattern**: Without any hint in the task doc, Gemini used
-`WHERE record_type = ? AND uuid_hex IN (placeholders)` with params `[record_type] + uuids`.
-This is the correct single-column approach. Also used composite `PRIMARY KEY (uuid_hex, record_type)`
-in the schema. Did not attempt the multi-column IN constructor that broke Qwen T10.
-
-**ExerciseSession test file E501 — self-corrected**: Task 16 encountered the same pre-written
-test file E501 that caused a lint-only degradation warning in T10 and T11. Gemini fixed it
-by splitting the `CREATE TABLE` string literal across three lines and wrapping the INSERT call
-— all while keeping the test semantics intact.
-
-**Override tasks (HeartRate, Sleep) — clean in 2 reflections each**: Correctly overrode
-`extract()` directly, left `_row_to_record()` raising `NotImplementedError` as required.
-
-**Docker — full 89-test suite pass**: UUIDStore passing (task 02 succeeded) meant the Docker
-task's full-suite verification found no leaking failures. This was the same task that degraded
-in T10 and T11 purely because of UUIDStore failures propagating into the full suite.
-
-**Aborted first run** (`run-20260312-132242.log`): 93-line truncated log showing an API-level
-restart after task 01 completed; UUIDStore stub was in default `raise NotImplementedError`
-state. Runner was restarted cleanly and the full run (`132307`) proceeded from scratch.
+Total LLM calls: 27. Zero test failures, zero degraded tasks, zero halts.
 
 ---
 
 ### Trial Set 13 — Qwen After import_integrity Fix (2026-03-12)
-**Logs**: `run-20260312-164811.log` (primary); `run-20260312-164812.log` (second log, same run)
-**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
-**Context**: 32,768 tokens
-**Skill state**: Post Chat 4 fixes — wiring task now pre-generated with `import_integrity` test; integration test remains deferred
-**Result**: 17/18 ✅, 1 degraded ⚠️ (task 17 wiring)
-
-| Task | Result | Notes |
-|------|--------|-------|
-| 01–16 | ✅ | All component tasks clean |
-| 17 Wire DAG | ⚠️ DEGRADED | Reflections exhausted on E501 lint in DAG file; tests ultimately pass (verified independently) |
-| 18 Docker | ✅ | |
-
-**Runner summary**: `18 tasks succeeded, 1 degraded. Deferred: 19-task-8.1-integration-test.md`
-
-#### Task 17 — Wire DAG: E501 Lint Spiral (T13)
-
-Qwen implemented the DAG correctly on the first attempt — all logic, imports, TaskGroup
-structure, dependency wiring correct. However, `xcom_pull` calls with f-string `task_ids`
-produced lines > 88 chars, triggering E501 on every reflection.
-
-**import_integrity worked correctly**: Qwen added no hallucinated imports. All 15 classes
-were exactly those listed in the task doc.
+**Logs**: `run-20260312-164811.log`
+**Model**: Qwen 3 Coder 30B (via LM Studio)
+**Result**: 17/18 ✅, 1 degraded ⚠️ (task 17 wiring — E501 spiral, tests pass)
 
 ---
 
 ### Trial Set 14 — Qwen Repeat Run: ISE → OOM on Wire DAG (2026-03-12)
 **Log**: `run-20260312-171153.log` (5,553 lines)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
-**Skill state**: Identical to T13
 **Result**: 16/18 ✅, 1 ❌ HALTED (task 17 — Metal OOM, DAG file emptied), task 18 not reached
-
-Same opening as T13 but ISE garbage stripped `EXTRACTORS` entirely. Context bloat → GPU OOM
-chain. Root cause: E501 reflections depleted the budget, ISE struck with nothing left.
 
 ---
 
 ### Trial Set 15 — Qwen After Wiring Task Callable-Body Snippet Fix (2026-03-14)
-**Log**: `run-20260314-121837.log` (1,587 lines — 4× smaller than T14's 5,553)
-**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
-**Context**: 32,768 tokens
-**Skill state**: Post pass-3 writing-guide fix — wiring task Behavior section uses code snippets
-for all callable bodies unconditionally (no prose, no length prediction)
+**Log**: `run-20260314-121837.log` (1,587 lines)
+**Model**: Qwen 3 Coder 30B (via LM Studio)
+**Skill state**: Post pass-3 writing-guide fix — unconditional code snippets in wiring task Behavior
 **Result**: **18/18 ✅ — first complete Qwen clean sweep. 1 degraded ⚠️ (task 2 UUIDStore — reflections exhausted, tests pass)**
 
-| Task | Result | Notes |
-|------|--------|-------|
-| 01 Settings | ✅ | |
-| 02 UUIDStore | ⚠️ (tests pass) | E501 on INSERT SQL string literal in `mark_seen` — reflections exhausted on lint, tests verified independently |
-| 03–16 | ✅ | All component tasks clean |
-| 17 Wire DAG | ✅ | **Zero E501 errors. 2 LLM calls total. No ISE. No OOM.** |
-| 18 Docker | ✅ | 76 tests pass in full-suite verification |
-
-**Runner summary**: `18 tasks succeeded, 1 degraded. Deferred: 19-task-8.1-integration-tests.md`
-
-#### Task 17 — Wire DAG: Clean Pass (T15)
-
-**2 LLM calls. Zero E501 errors. Zero ISE. Zero OOM.**
-
-The callable-body snippet rule worked. Qwen read the pre-wrapped forms in the Behavior
-section and reproduced them correctly on the first attempt — all `xcom_pull` calls written
-in wrapped multi-line form, routing keys as single-line f-strings, message dicts as
-multi-line literals. No lint errors triggered, so no reflection budget was consumed on
-formatting. The entire task completed in 2 LLM calls (initial write + one minor cleanup)
-compared to 3+ calls with ISE and OOM spiral in T13/T14.
-
-The produced `health_connect_ingest.py` is clean and correct: proper `make_extract` /
-`make_upload` / `make_publish` / `make_mark_seen` factory pattern for closure capture,
-all infrastructure objects constructed inside callables, `TaskGroup` per extractor,
-`download_task >> sqlite_task >> tg` dependency chain.
-
-#### Task 2 — UUIDStore: E501 on INSERT SQL String (T15 observation)
-
-Reflections exhausted on an E501 in `mark_seen`'s INSERT query string:
-```python
-query = "INSERT OR IGNORE INTO seen_uuids (uuid_hex, record_type, seen_at) VALUES (?, ?, ?)"
-```
-(100 chars). Tests passed on independent verification — correct behaviour, cosmetic lint only.
-This is the same class of issue as the wiring task pre-fix: a long SQL literal that the model
-writes as a one-liner. The task doc's Behavior section currently describes this in prose rather
-than showing a pre-wrapped form. **Candidate for a targeted fix in the UUIDStore task doc template.**
+Task 17 Wire DAG: 2 LLM calls, zero E501 errors, no ISE, no OOM. Snippet rule confirmed effective.
 
 ---
 
-## Model Comparison Summary (Trials 6–15)
+### Trial Set 16 — Codestral Final Confirmation (2026-03-14)
+**Log**: `run-20260314-123454.log` (1,793 lines — halted at task 7)
+**Model**: Codestral 22B v0.1 (via LM Studio) — `lm_studio/mistralai/codestral-22b-v0.1`
+**Context**: 32,768 tokens
+**Skill state**: Same as T15 (post all fixes including callable-body snippets in wiring task)
+**Result**: 2/7 ✅, 4 degraded ⚠️ (tests pass), 1 ❌ DEGRADED (task 3 — tests fail), effectively halted at task 7 via cascade
 
-| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 | Qwen T13 | Qwen T14 | Qwen T15 |
-|------------|---------|--------------|-----------|----------|---------------|------------|----------|----------|----------|
-| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (fix) | ✅ (fix) | ✅ | ✅ | ✅ | ✅ |
-| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
-| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
-| Resolves E501 lint reliably | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (self-fixes) | ⚠️ (ISE) | ❌ (ISE→OOM) | ✅ (no E501s on wiring) |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ | ✅ | ✅ | ✅ |
-| Respects test file boundary | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (improves) | ✅ | ✅ | ✅ |
-| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| import_integrity — no hallucinated imports | N/A | N/A | ❌ | N/A | N/A | N/A | ✅ | ✅ | ✅ |
-| Wire DAG survives LM Studio ISE | N/A | N/A | N/A | N/A | N/A | N/A | ⚠️ (lucky) | ❌ (OOM) | ✅ (no ISE triggered) |
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | 2 calls; E501 on settings file itself, fixed |
+| 02 UUIDStore | ⚠️ (tests pass) | 4 calls, 16 E501s on INSERT SQL string; reflections exhausted on lint |
+| 03 BaseRecordExtractor | ❌ DEGRADED | **Edit format failures** — all 4 calls rejected by aider ("No filename provided before ```"); nothing applied; `extract()` still raises `NotImplementedError` |
+| 04 GoogleDriveClient | ✅ | 1 call, clean |
+| 05 MinIOWriter | ⚠️ (tests pass) | 4 calls, 10 E501s; reflections exhausted on lint |
+| 06 RabbitMQPublisher | ⚠️ (tests pass) | 4 calls, 16 E501s; reflections exhausted on lint |
+| 07 StepsExtractor | ❌ HALTED (cascade) | `_row_to_record` written correctly, but `base.py.extract()` still raises `NotImplementedError` (task 3 never applied). Tests fail with `NotImplementedError` from base; aider burns reflection budget trying to diagnose. Log ends here. |
+| 08–18 | NOT RUN | Blocked by cascade from task 3 |
 
-**Overall pass rate**: Gemini T12: 17/17 · Qwen T13: 17/18 (wiring ⚠️) · Qwen T14: 16/18 (wiring ❌) · **Qwen T15: 18/18 ✅**
+#### Task 3 — BaseRecordExtractor: Edit Format Failure (T16)
 
-Both Gemini T12 and Qwen T15 are clean sweeps. Qwen T15 is the first complete Qwen run.
+Codestral produced syntactically correct, logically sound code for `base.py` across all 4
+LLM calls. However, every attempt omitted the required filename header line before the
+opening ``` fence. Aider's `whole` edit format requires:
+
+```
+services/airflow-ingestion/plugins/extractors/base.py
+```
+```python
+...code...
+```
+
+Codestral kept producing:
+```
+I apologize for the mistake. Here's the corrected version:
+```
+```python
+...code...
+```
+
+Aider rejected all 4 outputs with `"No filename provided before ``` in file listing"`. The
+reflection feedback clearly stated the error and linked the docs page each time. Codestral
+acknowledged the error, apologised, and produced the exact same malformed output again.
+Nothing was ever applied to `base.py`. The stub `raise NotImplementedError` in `extract()`
+remained in place.
+
+**Cascade from task 3**: Every downstream extractor (task 07+) calls `extract()` from
+`BaseRecordExtractor`. With `extract()` raising `NotImplementedError`, every extractor test
+fails — not because the extractor implementation is wrong, but because the base class was
+never implemented. The run effectively halted at task 7 with 11 tasks not reached.
+
+**This is not addressable at skill level.** The edit format failure is an intrinsic Codestral
+behaviour — it acknowledges the format requirement and still fails to apply it, consistently,
+across all 4 reflection attempts. No task doc change, no Behavior section improvement, no
+wording adjustment will fix a model that cannot conform to the agent framework's output format
+under reflection pressure.
+
+**Codestral disqualification confirmed for the third time (T8, T11, T16).**
+
+---
+
+## Model Comparison Summary (Trials 6–16)
+
+| Capability | Qwen T15 | Gemini T12 | Codestral T16 |
+|------------|----------|------------|---------------|
+| Settings — no module-level singleton | ✅ | ✅ | ✅ |
+| Follows ABC override instructions | ✅ | ✅ | ❌ (edit format failure prevents application) |
+| Implements methods completely | ✅ | ✅ | ⚠️ (code correct but not applied) |
+| Resolves E501 lint reliably | ✅ (wiring) | ✅ | ❌ (loops on every task) |
+| Conforms to aider edit format under reflection | ✅ | ✅ | ❌ (critical failure) |
+| Wire DAG — no ISE/OOM | ✅ | ✅ | N/A (never reached) |
+
+**Final standing across all TDD runs:**
+- Gemini 3.1 Flash Lite: **17/17 ✅** (T12) — clean sweep, reference model
+- Qwen 3 Coder 30B: **18/18 ✅** (T15) — clean sweep after snippet fix
+- Codestral 22B: **disqualified** — edit format failures, lint spirals, test file corruption; not fixable at skill level
 
 ---
 
 ## Open Issues
 
-1. **RESOLVED (2026-03-14) — Wire DAG callable body snippets**: Pass-3 rule (unconditional
-   snippets for all wiring callable bodies) confirmed effective in T15. Task 17 passed with
-   2 LLM calls and zero E501 errors. No ISE, no OOM.
+1. **RESOLVED (2026-03-14) — Wire DAG callable body snippets**: Confirmed effective in T15.
+   Task 17 passed with 2 LLM calls and zero E501 errors. No ISE, no OOM.
 
-2. **NEW — UUIDStore INSERT SQL E501**: `mark_seen` writes the INSERT query as a single
-   100-char string literal. Tests pass but reflections exhaust on lint. The Behavior section
-   should show the pre-wrapped form:
+2. **LOW PRIORITY — UUIDStore INSERT SQL E501**: `mark_seen` INSERT query is 100 chars.
+   Tests pass, cosmetic only. Can show pre-wrapped form in Behavior section when regenerating:
    ```python
    query = (
        "INSERT OR IGNORE INTO seen_uuids "
        "(uuid_hex, record_type, seen_at) VALUES (?, ?, ?)"
    )
    ```
-   This is the same class of fix as the wiring task snippets — applies the same principle
-   to a component task with a long SQL literal. Low priority: tests pass, cosmetic only.
 
-3. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: Still
-   relevant as a defence-in-depth measure against non-deterministic ISE events, even though
-   the snippet fix has eliminated the primary trigger.
+3. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: Defence
+   in depth against non-deterministic ISE; primary trigger eliminated by snippet fix.
 
 4. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
 
-5. **Codestral — disqualified**: Confirmed across T8 and T11. No further trials planned.
+5. **Codestral — permanently disqualified**: T8, T11, T16 all confirm the same failure modes.
+   Not addressable at skill level. No further Codestral trials.
 
 6. **Context length floor — 32k (Qwen/MLX)**: Do not reduce below 32k. See Trial Set 4.
 
