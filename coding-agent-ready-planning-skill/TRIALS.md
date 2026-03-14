@@ -394,101 +394,117 @@ Qwen implemented the DAG correctly on the first attempt — all logic, imports, 
 structure, dependency wiring correct. However, `xcom_pull` calls with f-string `task_ids`
 produced lines > 88 chars, triggering E501 on every reflection.
 
-**Spiral sequence:**
-1. Reflection 1 — fixed most E501s; one `record_uuids` list comprehension remained at 89 chars
-2. Reflection 2 — `litellm.InternalServerError` (repeating chunk) mid-generation; garbled output
-   (~30 duplicate `MinIOWriter` imports, lint command path embedded as Python import). Syntax errors.
-3. Reflection 3 — model recovered correctly, rewrote file cleanly. One E501 remained. Exhausted.
-4. Runner verified independently — all 4 `test_dag.py` tests passed. Marked ⚠️.
-
 **import_integrity worked correctly**: Qwen added no hallucinated imports. All 15 classes
 were exactly those listed in the task doc.
 
 ---
 
-### Trial Set 14 — Qwen Repeat Run to Confirm T13 Wire-DAG Pattern (2026-03-12)
-**Log**: `run-20260312-171153.log` (5,553 lines — 2.2× larger than T13's ~3,000)
-**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
-**Context**: 32,768 tokens
-**Skill state**: Identical to T13 — no changes between runs
-**Result**: 16/18 ✅, 1 ❌ HALTED (task 17 Wire DAG — Metal OOM), task 18 not reached
+### Trial Set 14 — Qwen Repeat Run: ISE → OOM on Wire DAG (2026-03-12)
+**Log**: `run-20260312-171153.log` (5,553 lines)
+**Model**: Qwen 3 Coder 30B (via LM Studio)
+**Skill state**: Identical to T13
+**Result**: 16/18 ✅, 1 ❌ HALTED (task 17 — Metal OOM, DAG file emptied), task 18 not reached
 
-| Task | Result | Notes |
-|------|--------|-------|
-| 01–16 | ✅ | All clean, identical to T13 |
-| 17 Wire DAG | ❌ HALTED | **Metal OOM killed model process** — DAG file left empty; `EXTRACTORS` not defined |
-| 18 Docker | NOT RUN | Task 17 halted the sequence |
-
-#### Task 17 — Wire DAG: ISE → Context Bloat → GPU OOM (T14)
-
-Same opening as T13 (3 LLM calls, 1 ISE), but ISE garbage this time stripped `EXTRACTORS`
-entirely. Test runner fed the ImportError back into aider across ~3,000 additional lines of
-context. By the time aider attempted another generation pass, the 32k KV cache was exhausted
-and MLX hard-crashed with a Metal GPU OOM (7 retries, exponential backoff to 32s). Final
-DAG file: empty.
-
-**Exact failure chain:**
-1. Attempt 1: Qwen generates full correct DAG. 10 E501s remain.
-2. Reflection 1: Wraps most xcom_pull calls. 1 E501 remains.
-3. Reflection 2: `litellm.InternalServerError` (192 tokens of garbage). File stripped to
-   broken imports fragment — no `EXTRACTORS`.
-4. Tests: `ImportError: cannot import name 'EXTRACTORS'`.
-5. Reflections 3–N: "EXTRACTORS not found" loop. Context grows ~3,000 lines.
-6. GPU OOM: 32k KV cache exhausted. MLX crashes. File: empty.
-
-**Why this is worse than T13**: T13's ISE garbage happened to include enough valid content
-that `EXTRACTORS` survived. T14's didn't. Same failure mode, different damage from the same
-non-deterministic ISE event.
-
-**Root cause**: E501 lint on xcom_pull lines consumed reflections, leaving no budget when ISE
-struck. The fix is to eliminate E501s on the first attempt by pre-wrapping long call patterns
-in the Behavior section — the model copies whatever form it reads.
+Same opening as T13 but ISE garbage stripped `EXTRACTORS` entirely. Context bloat → GPU OOM
+chain. Root cause: E501 reflections depleted the budget, ISE struck with nothing left.
 
 ---
 
-## Model Comparison Summary (Trials 6–14)
+### Trial Set 15 — Qwen After Wiring Task Callable-Body Snippet Fix (2026-03-14)
+**Log**: `run-20260314-121837.log` (1,587 lines — 4× smaller than T14's 5,553)
+**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
+**Context**: 32,768 tokens
+**Skill state**: Post pass-3 writing-guide fix — wiring task Behavior section uses code snippets
+for all callable bodies unconditionally (no prose, no length prediction)
+**Result**: **18/18 ✅ — first complete Qwen clean sweep. 1 degraded ⚠️ (task 2 UUIDStore — reflections exhausted, tests pass)**
 
-| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 | Qwen T13 | Qwen T14 |
-|------------|---------|--------------|-----------|----------|---------------|------------|----------|----------|
-| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (fix) | ✅ (fix) | ✅ | ✅ | ✅ |
-| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ |
-| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ |
-| Resolves E501 lint reliably | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (self-fixes) | ⚠️ (ISE) | ❌ (ISE→OOM) |
-| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ | ✅ | ✅ |
-| Respects test file boundary | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (improves) | ✅ | ✅ |
-| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| import_integrity — no hallucinated imports | N/A | N/A | ❌ | N/A | N/A | N/A | ✅ | ✅ |
-| Wire DAG survives LM Studio ISE | N/A | N/A | N/A | N/A | N/A | N/A | ⚠️ (lucky) | ❌ (OOM) |
+| Task | Result | Notes |
+|------|--------|-------|
+| 01 Settings | ✅ | |
+| 02 UUIDStore | ⚠️ (tests pass) | E501 on INSERT SQL string literal in `mark_seen` — reflections exhausted on lint, tests verified independently |
+| 03–16 | ✅ | All component tasks clean |
+| 17 Wire DAG | ✅ | **Zero E501 errors. 2 LLM calls total. No ISE. No OOM.** |
+| 18 Docker | ✅ | 76 tests pass in full-suite verification |
 
-**Component task pass rate (tasks 01–16), Qwen T10–T14: 16/16 — fully consistent.**
+**Runner summary**: `18 tasks succeeded, 1 degraded. Deferred: 19-task-8.1-integration-tests.md`
 
-**Wire DAG (task 17) Qwen results**: T13: ⚠️ (tests pass, lint degraded) · T14: ❌ (OOM)
+#### Task 17 — Wire DAG: Clean Pass (T15)
+
+**2 LLM calls. Zero E501 errors. Zero ISE. Zero OOM.**
+
+The callable-body snippet rule worked. Qwen read the pre-wrapped forms in the Behavior
+section and reproduced them correctly on the first attempt — all `xcom_pull` calls written
+in wrapped multi-line form, routing keys as single-line f-strings, message dicts as
+multi-line literals. No lint errors triggered, so no reflection budget was consumed on
+formatting. The entire task completed in 2 LLM calls (initial write + one minor cleanup)
+compared to 3+ calls with ISE and OOM spiral in T13/T14.
+
+The produced `health_connect_ingest.py` is clean and correct: proper `make_extract` /
+`make_upload` / `make_publish` / `make_mark_seen` factory pattern for closure capture,
+all infrastructure objects constructed inside callables, `TaskGroup` per extractor,
+`download_task >> sqlite_task >> tg` dependency chain.
+
+#### Task 2 — UUIDStore: E501 on INSERT SQL String (T15 observation)
+
+Reflections exhausted on an E501 in `mark_seen`'s INSERT query string:
+```python
+query = "INSERT OR IGNORE INTO seen_uuids (uuid_hex, record_type, seen_at) VALUES (?, ?, ?)"
+```
+(100 chars). Tests passed on independent verification — correct behaviour, cosmetic lint only.
+This is the same class of issue as the wiring task pre-fix: a long SQL literal that the model
+writes as a one-liner. The task doc's Behavior section currently describes this in prose rather
+than showing a pre-wrapped form. **Candidate for a targeted fix in the UUIDStore task doc template.**
+
+---
+
+## Model Comparison Summary (Trials 6–15)
+
+| Capability | Qwen T7 | Codestral T8 | Gemini T9 | Qwen T10 | Codestral T11 | Gemini T12 | Qwen T13 | Qwen T14 | Qwen T15 |
+|------------|---------|--------------|-----------|----------|---------------|------------|----------|----------|----------|
+| Settings — no module-level singleton | ❌ | ❌ | ✅ | ✅ (fix) | ✅ (fix) | ✅ | ✅ | ✅ | ✅ |
+| Follows ABC override instructions | ✅ | ❌ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
+| Implements methods completely | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
+| Resolves E501 lint reliably | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (self-fixes) | ⚠️ (ISE) | ❌ (ISE→OOM) | ✅ (no E501s on wiring) |
+| SQLite :memory: single-connection | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| SQLite multi-column IN clause | N/A | N/A | N/A | ❌ | N/A | ✅ | ✅ | ✅ | ✅ |
+| Respects test file boundary | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ (improves) | ✅ | ✅ | ✅ |
+| Cascade isolation | ❌ (old) | ❌ (old) | ❌ (old) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| import_integrity — no hallucinated imports | N/A | N/A | ❌ | N/A | N/A | N/A | ✅ | ✅ | ✅ |
+| Wire DAG survives LM Studio ISE | N/A | N/A | N/A | N/A | N/A | N/A | ⚠️ (lucky) | ❌ (OOM) | ✅ (no ISE triggered) |
+
+**Overall pass rate**: Gemini T12: 17/17 · Qwen T13: 17/18 (wiring ⚠️) · Qwen T14: 16/18 (wiring ❌) · **Qwen T15: 18/18 ✅**
+
+Both Gemini T12 and Qwen T15 are clean sweeps. Qwen T15 is the first complete Qwen run.
 
 ---
 
 ## Open Issues
 
-1. **IN PROGRESS — Wire DAG callable body snippets (pass 3 applied 2026-03-14)**:
-   Three skill update passes applied to `writing-guide.md`. Root cause of partial
-   application in pass 2: the rule was still conditional ("use snippets when you predict
-   the line will be long"), so Claude Code applied it to obvious cases (multi-key dicts)
-   but not borderline ones (simple two-argument xcom_pull). Pass 3 removes the
-   length-prediction gate entirely: wiring task Behavior sections must use code snippets
-   for **all callable bodies**, unconditionally, no length judgement required. The
-   "interface contracts, not implementation code" Core Principle now has an explicit
-   carve-out for wiring task callables. Regenerate and verify.
+1. **RESOLVED (2026-03-14) — Wire DAG callable body snippets**: Pass-3 rule (unconditional
+   snippets for all wiring callable bodies) confirmed effective in T15. Task 17 passed with
+   2 LLM calls and zero E501 errors. No ISE, no OOM.
 
-2. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: If aider
-   exits 0 but a known critical export (like `EXTRACTORS`) is not importable, restore from
-   the pre-task backup and retry rather than feeding the error back into a growing context.
-   This prevents the ISE-garbage → context-bloat → OOM chain seen in T14.
+2. **NEW — UUIDStore INSERT SQL E501**: `mark_seen` writes the INSERT query as a single
+   100-char string literal. Tests pass but reflections exhaust on lint. The Behavior section
+   should show the pre-wrapped form:
+   ```python
+   query = (
+       "INSERT OR IGNORE INTO seen_uuids "
+       "(uuid_hex, record_type, seen_at) VALUES (?, ?, ?)"
+   )
+   ```
+   This is the same class of fix as the wiring task snippets — applies the same principle
+   to a component task with a long SQL literal. Low priority: tests pass, cosmetic only.
 
-3. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
+3. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: Still
+   relevant as a defence-in-depth measure against non-deterministic ISE events, even though
+   the snippet fix has eliminated the primary trigger.
 
-4. **Codestral — disqualified**: Confirmed across T8 and T11. No further trials planned.
+4. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
 
-5. **Context length floor — 32k (Qwen/MLX)**: Do not reduce below 32k. See Trial Set 4.
+5. **Codestral — disqualified**: Confirmed across T8 and T11. No further trials planned.
+
+6. **Context length floor — 32k (Qwen/MLX)**: Do not reduce below 32k. See Trial Set 4.
 
 ---
 
@@ -523,4 +539,4 @@ in the Behavior section — the model copies whatever form it reads.
 | 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section added; Layer 1 skipped for wiring; Layer 2 = import integrity check against actual files; manifest examples updated |
 | 2026-03-13 (pass 1) | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests |
 | 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle |
-| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — snippet rule is now unconditional for all wiring task callable bodies; explains why prediction is unreliable and why even short-looking calls should use snippets |
+| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — snippet rule is now unconditional for all wiring task callable bodies; confirmed effective in T15 (0 E501s, 2 LLM calls, no ISE) |
