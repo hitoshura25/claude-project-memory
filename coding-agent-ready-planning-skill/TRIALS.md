@@ -229,7 +229,7 @@ ratio shows a compact, focused generation — no bloat, no spiral.
 8 E501s, reflections exhausted on the 97-char INSERT SQL literal in `mark_seen`). Tests pass
 independently. This is cosmetic-only and the behaviour is fully predictable: Qwen writes the
 INSERT string as a single line, linter fires, all 3 reflections spend on formatting rather
-than logic. Open Issue #2 tracks the pre-wrapped form fix for this.
+than logic. Addressed in Chat 5 by the SQL Constants Pattern upstream fix.
 
 **Tasks 9 and 10 (2 calls each)**: HeartRate and HRV each had one E501 on a long child-table
 query string. Qwen resolved both in 1 reflection — a better outcome than the T15 equivalent
@@ -275,20 +275,20 @@ produce reliable clean sweeps. The skill is stable and the TDD workflow is prove
 1. **RESOLVED — Wire DAG callable body snippets**: Confirmed in T15 (Qwen), T17 (Gemini),
    T18 (Qwen). Task 17 now passes in 1 LLM call with 0 E501 errors across all three runs.
 
-2. **LOW PRIORITY — UUIDStore INSERT SQL E501**: Qwen exhausts reflections on the 97-char
-   INSERT literal in `mark_seen` every run (T15, T18). Tests always pass. Gemini self-fixes
-   in 1 reflection. Pre-wrapped form to use when regenerating task docs:
-   ```python
-   query = (
-       "INSERT OR IGNORE INTO seen_uuids "
-       "(uuid_hex, record_type, seen_at) VALUES (?, ?, ?)"
-   )
-   ```
+2. **RESOLVED (Chat 5) — UUIDStore SQL E501**: Root cause is inline SQL literals in method
+   bodies. Fixed upstream in `python-pytest.md` with the "SQL Constants Pattern" — all SQL
+   strings must be assigned to named module-level constants, never inlined in method bodies.
+   Task docs must show the constant definition in the Behavior section. This is generic Python
+   idiom and eliminates the lint surface entirely, regardless of SQL complexity.
 
 3. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: Defence
    in depth against non-deterministic ISE; primary trigger eliminated by snippet fix.
 
-4. **Integration test (task 19) still deferred**: Requires live MinIO + RabbitMQ containers.
+4. **RESOLVED (Chat 5) — Integration test deferral**: Integration tests are now classified as
+   "service-gated" rather than "deferred". Their task docs are generated upfront alongside
+   component tasks. Runner uses `requires_services` manifest field + `service_check_commands`
+   to skip (not halt) when services are unavailable. Runner resumes automatically when
+   services are reachable via `--start N`.
 
 5. **Codestral — permanently disqualified**: T8, T11, T16. Not addressable at skill level.
 
@@ -328,3 +328,7 @@ produce reliable clean sweeps. The skill is stable and the TDD workflow is prove
 | 2026-03-13 (pass 1) | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests |
 | 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle |
 | 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — unconditional snippets for all wiring callable bodies; confirmed effective in T15, T17, T18 |
+| 2026-03-14 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: SQL Constants Pattern — never inline SQL in method bodies; use named module-level constants; addresses UUIDStore E501 degradation at the source |
+| 2026-03-14 (Chat 5) | `references/writing-guide.md` | **Fix**: "Deferred Tasks vs Service-Gated Tasks" section — integration tests reclassified as service-gated (`requires_services`); runner skips rather than halts; decision table added |
+| 2026-03-14 (Chat 5) | `run-tasks-template.sh` | **Fix**: `requires_services` + `service_check_commands` support — per-task service health checks; skip with warning when unavailable; `SKIPPED_SERVICES` counter in final summary |
+| 2026-03-14 (Chat 5) | `SKILL.md` Step 5 | **Fix**: deferred vs service-gated distinction documented; manifest example updated to show integration test as `requires_services`, not `deferred` |
