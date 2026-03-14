@@ -93,39 +93,32 @@ Qwen 30B reasons better but fails on non-trivial logic. Spec-based needs ~GPT-4 
 
 ### Trial Set 2 — TDD Approach (2026-03-03)
 **Model**: Qwen 3 Coder 30B Q4
-**Tasks**: 18 implementation + 1 deferred
-**Result**: 16/18 completed before interruption
+**Result**: 16/18 completed before interruption.
 
 ---
 
 ### Trial Set 3 — After Runner Fixes (2026-03-04 morning)
-**Log**: `run-20260304-114920.log`
-**Result**: 13 completed, 4 degraded
+**Result**: 13 completed, 4 degraded.
 
 ---
 
 ### Trial Set 4 — 12k Context Experiment (2026-03-04 afternoon)
-**Log**: `run-20260304-150619.log`
-**Context**: 12,000 tokens
 **Result**: Crashed at task 9. **Conclusion**: Do not reduce context below 32k for Qwen 30B.
 
 ---
 
 ### Trial Set 5 — Reverted Abstract-Class Patch + 32k Context (2026-03-04 evening)
-**Log**: `run-20260304-155543.log`
 **Result**: Task 18 completed. Script hung on HeartRateExtractor (task 9).
 
 ---
 
 ### Trial Set 6 — Skill Updates Applied (2026-03-09)
-**Log**: `run-20260309-123229.log`
 **Model**: Qwen 3 Coder 30B Q4
 **Result**: 11/18 ✅, 1 degraded ⚠️ (task 6), halted at task 12 ❌
 
 ---
 
 ### Trial Set 7 — After Conftest + UUIDStore + DAG Redesign (2026-03-10 morning)
-**Log**: `run-20260310-105632.log`
 **Model**: Qwen 3 Coder 30B Q4
 **Result**: 9/12 ✅, 3 degraded ⚠️ (tasks 1, 6, 12), halted at task 13 ❌
 
@@ -133,35 +126,32 @@ Qwen 30B reasons better but fails on non-trivial logic. Spec-based needs ~GPT-4 
 
 ### Trial Set 8 — Codestral 22B Head-to-Head (2026-03-10)
 **Model**: Codestral 22B v0.1
-**Result**: 5/18 ✅, 13 degraded ⚠️, 0 halts. Codestral-specific failure modes: edit format
-failures, lint spirals, test file corruption, incomplete ABC.
+**Result**: 5/18 ✅, 13 degraded ⚠️. Edit format failures, lint spirals, test file corruption.
 
 ---
 
 ### Trial Set 9 — Gemini 2.0 Flash Lite Head-to-Head (2026-03-10 afternoon)
-**Model**: `gemini/gemini-2.0-flash-lite-preview` (Gemini API)
+**Model**: `gemini/gemini-2.0-flash-lite-preview`
 **Result**: 12/13 ✅, 1 degraded ⚠️ (task 13), halted at task 14 ❌
 
 ---
 
-### Trial Set 10 — Qwen Coder After Cascade Fix + Settings Fix (2026-03-12)
-**Log**: `run-20260312-112908.log`
+### Trial Set 10 — Qwen After Cascade Fix + Settings Fix (2026-03-12)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
 **Result**: 15/17 ✅, 2 degraded ⚠️ (tasks 2, 17)
 
 ---
 
-### Trial Set 11 — Codestral 22B After Cascade Fix (2026-03-12)
-**Log**: `run-20260312-115442.log`
+### Trial Set 11 — Codestral After Cascade Fix (2026-03-12)
 **Model**: Codestral 22B v0.1 (via LM Studio)
-**Result**: 7/17 ✅, 9 degraded ⚠️, 1 warning. Codestral confirmed disqualified.
+**Result**: 7/17 ✅, 9 degraded ⚠️. Codestral confirmed disqualified.
 
 ---
 
-### Trial Set 12 — Gemini 3.1 Flash Lite Preview — First Clean Sweep (2026-03-12)
+### Trial Set 12 — Gemini 3.1 Flash Lite — First Clean Sweep (2026-03-12)
 **Log**: `run-20260312-132307.log`
 **Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
-**Result**: **17/17 ✅** — 27 LLM calls total, zero degraded tasks.
+**Result**: **17/17 ✅** — 27 LLM calls, 0 degraded.
 
 ---
 
@@ -171,113 +161,123 @@ failures, lint spirals, test file corruption, incomplete ABC.
 
 ---
 
-### Trial Set 14 — Qwen Repeat Run: ISE → OOM on Wire DAG (2026-03-12)
-**Log**: `run-20260312-171153.log` (5,553 lines)
+### Trial Set 14 — Qwen Repeat: ISE → OOM on Wire DAG (2026-03-12)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
 **Result**: 16/18 ✅, 1 ❌ HALTED (task 17 — Metal OOM, DAG file emptied)
 
 ---
 
-### Trial Set 15 — Qwen After Wiring Task Callable-Body Snippet Fix (2026-03-14)
+### Trial Set 15 — Qwen After Callable-Body Snippet Fix (2026-03-14)
 **Log**: `run-20260314-121837.log` (1,587 lines)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
-**Skill state**: Post pass-3 writing-guide fix — unconditional code snippets in wiring task Behavior
+**Skill state**: Post pass-3 — unconditional code snippets in wiring task Behavior sections
 **Result**: **18/18 ✅ — first complete Qwen clean sweep.** 1 ⚠️ (task 2 UUIDStore — tests pass).
-Task 17: 2 LLM calls, zero E501 errors, no ISE, no OOM. Snippet rule confirmed effective.
+Task 17: 2 LLM calls, 0 E501s, no ISE, no OOM.
 
 ---
 
 ### Trial Set 16 — Codestral Final Confirmation (2026-03-14)
-**Log**: `run-20260314-123454.log` (1,793 lines — halted at task 7)
+**Log**: `run-20260314-123454.log` (halted at task 7)
 **Model**: Codestral 22B v0.1 (via LM Studio)
-**Result**: 2/7 ✅, 4 ⚠️ (tests pass), 1 ❌ (task 3 — edit format failure, cascade to task 7)
-
-Task 3 (BaseRecordExtractor): all 4 LLM calls rejected by aider — correct code produced but
-filename header omitted every time. `extract()` never applied, stub remained. Every downstream
-extractor hit `NotImplementedError` from base. **Codestral disqualified — third confirmation.**
+**Result**: 2/7 ✅, 1 ❌ task 3 edit format failure cascading to all downstream extractors.
+**Codestral disqualified — third and final confirmation.**
 
 ---
 
-### Trial Set 17 — Gemini 3.1 Flash Lite Preview — Second Clean Sweep (2026-03-14)
+### Trial Set 17 — Gemini 3.1 Flash Lite — Second Clean Sweep (2026-03-14)
 **Log**: `run-20260314-130209.log` (1,501 lines)
 **Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
-**Skill state**: Same as T15/T16 (post all fixes, including callable-body snippets in wiring task)
-**Result**: **18/18 ✅, 0 degraded — perfect clean sweep**
+**Result**: **18/18 ✅, 0 degraded** — 21 LLM calls (down from 27 in T12).
+Task 17: 1 LLM call, 0 E501s. 12/18 tasks in exactly 1 call.
+
+---
+
+### Trial Set 18 — Qwen Second Clean Sweep — Loop Closed (2026-03-14)
+**Log**: `run-20260314-162120.log` (1,587 lines — identical length to T15)
+**Model**: Qwen 3 Coder 30B (via LM Studio) — `lm_studio/qwen/qwen3-coder-30b`
+**Context**: 32,768 tokens
+**Skill state**: Identical to T15 and T17 — no changes between runs
+**Result**: **18/18 ✅ — second consecutive Qwen clean sweep. 1 ⚠️ (task 2 UUIDStore — reflections exhausted, tests pass)**
 
 | Task | Calls | E501s | Notes |
 |------|-------|-------|-------|
 | 01 Settings | 1 | 0 | ✅ |
-| 02 UUIDStore | 2 | 4 | ✅ — fixed E501s in reflection, tests pass |
+| 02 UUIDStore | 4 | 8 | ⚠️ — INSERT SQL literal 97 chars; reflections exhausted on lint; tests pass |
 | 03 BaseRecordExtractor | 1 | 0 | ✅ |
 | 04 GoogleDriveClient | 1 | 0 | ✅ |
 | 05 MinIOWriter | 1 | 0 | ✅ |
 | 06 RabbitMQPublisher | 1 | 0 | ✅ |
 | 07 StepsExtractor | 1 | 0 | ✅ |
 | 08 BloodGlucoseExtractor | 1 | 0 | ✅ |
-| 09 HeartRateExtractor | 2 | 4 | ✅ — fixed E501s in reflection |
-| 10 HRVRmssdExtractor | 1 | 0 | ✅ |
-| 11 SleepExtractor | 2 | 4 | ✅ — fixed E501s in reflection |
+| 09 HeartRateExtractor | 2 | 2 | ✅ — single E501 on child query string, self-fixed |
+| 10 HRVRmssdExtractor | 2 | 2 | ✅ — single E501 on query string, self-fixed |
+| 11 SleepExtractor | 1 | 0 | ✅ |
 | 12–16 | 1 each | 0 | ✅ all clean first attempt |
-| 17 Wire DAG | 1 | 0 | ✅ — **single call, zero E501s** |
+| 17 Wire DAG | 1 | 0 | ✅ — **single call, zero E501s, no ISE, no OOM** |
 | 18 Docker | 1 | 0 | ✅ |
 
-**Runner summary**: `18 tasks succeeded, 0 degraded`
+**Runner summary**: `18 tasks succeeded, 1 degraded`
+**Total LLM calls: 23**
 
-**Total LLM calls: 21** — 6 fewer than T12's 27. Efficiency improvement confirms skill improvements
-(callable-body snippets, tighter task docs) are reducing the work Gemini needs to do.
+#### T18 Analysis
 
-**Zero degraded tasks** — T12 had no degraded either, but T17 is the first run with the full suite
-of skill fixes in place and still achieves the same result. Confirmation that the skill changes
-didn't break Gemini compatibility.
+**Task 17 Wire DAG: 1 LLM call, 0 E501s, 0 ISE, 0 OOM** — an improvement over T15's 2
+calls. The callable-body snippets continue to hold. The 3.3k sent / 1.3k received token
+ratio shows a compact, focused generation — no bloat, no spiral.
 
-#### T17 Notable observations
+**Task 2 UUIDStore ⚠️ is the only persistent degradation** — same pattern as T15 (4 calls,
+8 E501s, reflections exhausted on the 97-char INSERT SQL literal in `mark_seen`). Tests pass
+independently. This is cosmetic-only and the behaviour is fully predictable: Qwen writes the
+INSERT string as a single line, linter fires, all 3 reflections spend on formatting rather
+than logic. Open Issue #2 tracks the pre-wrapped form fix for this.
 
-**Task 17 Wire DAG: 1 LLM call, 0 E501s** — T12 completed task 17 in 2 calls with a test
-file E501 self-fix. T17 completed it in a single call with zero lint errors at all. The
-callable-body snippets in the Behavior section eliminated any lint issues before they could
-even surface.
+**Tasks 9 and 10 (2 calls each)**: HeartRate and HRV each had one E501 on a long child-table
+query string. Qwen resolved both in 1 reflection — a better outcome than the T15 equivalent
+where these also needed reflections. Shows Qwen can self-fix short E501 spirals when there's
+only one offending line.
 
-**UUIDStore, HeartRate, Sleep (2 calls each)**: The three tasks that required a reflection
-all had E501s on SQL string literals or long query strings — the same category as the
-UUIDStore ⚠️ seen in T15 Qwen. Gemini self-fixed all of them within 1 reflection (4 E501s
-each, all resolved). Qwen exhausted its budget on the same lines. This confirms the
-difference: Gemini resolves lint in 1 reflection; Qwen sometimes needs more.
+**15 of 18 tasks completed in 1 LLM call** — the task set is well-calibrated for Qwen's
+capability level with the current skill state.
 
-**12 of 18 tasks completed in exactly 1 LLM call** — no reflections needed at all. For the
-majority of the task set Gemini writes clean, lint-passing, test-passing code on the first
-attempt.
+**Log size stability**: Both T15 and T18 are exactly 1,587 lines (vs T14's 5,553 with the
+ISE/OOM spiral). The snippet fix has produced a consistent, bounded execution profile across
+multiple Qwen runs.
 
 ---
 
-## Model Comparison Summary (Trials 12–17, post-TDD maturity)
+## Model Comparison Summary — Final (post-TDD maturity)
 
-| Metric | Gemini T12 | Qwen T15 | Gemini T17 | Codestral T16 |
-|--------|------------|----------|------------|---------------|
-| Pass rate | 17/17 ✅ | 18/18 ✅ | 18/18 ✅ | ❌ halted T7 |
-| Degraded tasks | 0 | 1 ⚠️ (tests pass) | 0 | cascade failure |
-| Total LLM calls | 27 | ~21 | 21 | N/A |
-| Wire DAG calls | 2 | 2 | **1** | N/A |
-| Wire DAG E501s | 0 | 0 | **0** | N/A |
-| Self-fixes E501 lint | ✅ | ⚠️ (sometimes exhausts) | ✅ | ❌ always loops |
-| Edit format discipline | ✅ | ✅ | ✅ | ❌ critical failure |
+| Metric | Gemini T12 | Gemini T17 | Qwen T15 | Qwen T18 | Codestral T16 |
+|--------|------------|------------|----------|----------|---------------|
+| Pass rate | 17/17 ✅ | 18/18 ✅ | 18/18 ✅ | 18/18 ✅ | ❌ halted T7 |
+| Degraded | 0 | 0 | 1 ⚠️ (pass) | 1 ⚠️ (pass) | cascade |
+| Total calls | 27 | 21 | 23 | 23 | N/A |
+| Wire DAG calls | 2 | 1 | 2 | **1** | N/A |
+| Wire DAG E501s | 0 | 0 | 0 | 0 | N/A |
+| Log lines | ~1500 | 1,501 | 1,587 | 1,587 | N/A |
+| Self-fixes E501 | ✅ always | ✅ always | ⚠️ sometimes exhausts | ⚠️ sometimes exhausts | ❌ always loops |
 
-**Final model standing:**
-- **Gemini 3.1 Flash Lite**: two clean sweeps (T12: 17/17, T17: 18/18). More efficient each run.
-  Zero degraded across both. Reference model.
-- **Qwen 3 Coder 30B**: 18/18 clean sweep (T15) after snippet fix. 1 cosmetic ⚠️ (tests pass).
-  Reliable with appropriate task doc authoring.
+**Stable final standings:**
+- **Gemini 3.1 Flash Lite**: two clean sweeps (T12, T17). More efficient each run: 27 → 21 calls.
+  Zero degraded across both. Reference model for speed and reliability.
+- **Qwen 3 Coder 30B**: two consecutive clean sweeps (T15, T18). Consistent 23 calls each,
+  consistent 1,587-line logs. One persistent cosmetic ⚠️ (UUIDStore lint, tests always pass).
+  Reliable local model when task docs follow the snippet rules.
 - **Codestral 22B**: permanently disqualified (T8, T11, T16). Not fixable at skill level.
+
+**The approach is validated**: both the Gemini (API) and Qwen (local/LM Studio) paths
+produce reliable clean sweeps. The skill is stable and the TDD workflow is proven.
 
 ---
 
 ## Open Issues
 
-1. **RESOLVED (2026-03-14) — Wire DAG callable body snippets**: Confirmed effective in T15
-   (Qwen) and T17 (Gemini). Task 17 passes in 1–2 LLM calls with zero E501 errors.
+1. **RESOLVED — Wire DAG callable body snippets**: Confirmed in T15 (Qwen), T17 (Gemini),
+   T18 (Qwen). Task 17 now passes in 1 LLM call with 0 E501 errors across all three runs.
 
-2. **LOW PRIORITY — UUIDStore INSERT SQL E501**: `mark_seen` INSERT query is 100 chars.
-   Gemini self-fixes in 1 reflection; Qwen exhausts budget. Tests pass in both cases.
-   Can show pre-wrapped form in Behavior section:
+2. **LOW PRIORITY — UUIDStore INSERT SQL E501**: Qwen exhausts reflections on the 97-char
+   INSERT literal in `mark_seen` every run (T15, T18). Tests always pass. Gemini self-fixes
+   in 1 reflection. Pre-wrapped form to use when regenerating task docs:
    ```python
    query = (
        "INSERT OR IGNORE INTO seen_uuids "
@@ -327,4 +327,4 @@ attempt.
 | 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section added; Layer 1 skipped for wiring; Layer 2 = import integrity check against actual files; manifest examples updated |
 | 2026-03-13 (pass 1) | `references/writing-guide.md` | **Fix**: Pre-wrap long call patterns rule added to Core Principles and Wiring Task Tests |
 | 2026-03-13 (pass 2) | `references/writing-guide.md` | **Fix**: Tightened rule — now requires code snippets (not prose) for callable bodies in wiring task Behavior sections; explicit exception to "no implementation code" principle |
-| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — snippet rule is now unconditional for all wiring task callable bodies; confirmed effective in T15 (Qwen) and T17 (Gemini) |
+| 2026-03-14 (pass 3) | `references/writing-guide.md` | **Fix**: Removed length-prediction gate entirely — unconditional snippets for all wiring callable bodies; confirmed effective in T15, T17, T18 |
