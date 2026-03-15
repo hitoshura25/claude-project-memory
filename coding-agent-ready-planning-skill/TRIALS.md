@@ -109,7 +109,7 @@ Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structur
 
 **Standings:**
 - **Gemini 3.1 Flash Lite**: three clean sweeps (T12, T17, T20). Reference model.
-- **Qwen 3 Coder 30B**: clean on original task set (T15, T18); two addressable failures on new task set (T19). Issue #7 fixed; issue #8 addressed in runner redesign (Chat 5).
+- **Qwen 3 Coder 30B**: clean on original task set (T15, T18); two addressable failures on new task set (T19). Issues #7 and #8 resolved in Chat 5.
 - **Codestral 22B**: permanently disqualified.
 
 ---
@@ -122,8 +122,8 @@ Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structur
 4. **RESOLVED (Chat 5) — Integration test deferral**
 5. **Codestral — permanently disqualified**
 6. **Context length floor — 32k (Qwen/MLX)**
-7. **RESOLVED (Chat 5) — RabbitMQ `is_closed` mock trap**: `mock_conn.is_closed = False` in fixture + Pika Connection Lifecycle Trap section in `python-pytest.md`
-8. **RESOLVED (Chat 5) — Docker task test_command / runner redesign**: Runner no longer falls back to global suite when `test_command` is null/empty. `requires_services` is now a hard-fail (exit) not a skip. Infrastructure tasks get dedicated Docker smoke tests via the new two-compose pattern.
+7. **RESOLVED (Chat 5) — RabbitMQ `is_closed` mock trap**
+8. **RESOLVED (Chat 5) — Docker task test_command / runner redesign + upstream plan-format.md**
 
 ---
 
@@ -167,5 +167,7 @@ Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structur
 | 2026-03-15 (Chat 5) | `scripts/docker-smoke-test-template.sh` | **New**: Parameterised Docker smoke test template — build, --wait, health poll, assertions, cleanup trap |
 | 2026-03-15 (Chat 5) | `scripts/infra-lint-wrapper-template.sh` | **New**: Infrastructure lint wrapper — routes Dockerfiles→hadolint, compose→docker compose config, Python→ruff |
 | 2026-03-15 (Chat 5) | `references/tooling.md` | **Fix**: Added "Mixed-Technology Projects" section with detection table and pointer to stacks/infra.md; updated stack file table to include infra.md |
-| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: (1) Per-task `lint_cmd` override — infra tasks use their own linter; (2) Removed global-suite fallback — null/empty `test_command` means no test gate, not "use global"; (3) `requires_services` is now hard-fail (exit 1) not skip-and-continue |
-| 2026-03-15 (Chat 5) | `SKILL.md` | **Update**: Step 1 adds infra task detection; Step 2 adds infra tooling detection note; Step 3 adds infra setup instructions; Step 3b adds smoke test validation; Step 6 manifest example includes Docker task with per-task `lint_cmd`; Bundled Resources table updated with three new scripts and infra.md |
+| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: Per-task `lint_cmd` override; removed global-suite fallback; `requires_services` hard-fail |
+| 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, infra tooling setup, smoke test validation, manifest example, Bundled Resources |
+| 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: (1) Document structure template adds Phase N+1 Deployment between Wiring and Integration Tests; (2) Phase table description updated — Phase 7 Deployment now described, Phase 8 says hard-fail not skip; (3) Phase 7 Deployment guidance added — two-compose pattern, smoke test scenario, per-task lint_cmd, what the model creates; (4) Phase 8 Integration Tests description corrected — runner exits on unavailable services, not skips; (5) Deferred/service-gated table updated — "exits with an error" not "skips"; (6) Deployment task test scenario section added; (7) Sizing guidance updated — deployment tasks always create exactly three files |
+| 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: (1) Step 2 "Flag deferred tasks" bullet replaced — integration tests are service-gated (hard-fail), not deferred; (2) Step 2 adds "Deployment tasks" bullet describing two-compose pattern; (3) Step 3 validation checklist updated — deployment tasks check for both compose files, integration tests check for `Requires services:` not deferred; (4) Step 4 hand-off template shows Phase 7 Deployment and updated Phase 8 description |
