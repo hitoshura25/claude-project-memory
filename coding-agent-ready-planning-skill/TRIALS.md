@@ -284,11 +284,13 @@ produce reliable clean sweeps. The skill is stable and the TDD workflow is prove
 3. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**: Defence
    in depth against non-deterministic ISE; primary trigger eliminated by snippet fix.
 
-4. **RESOLVED (Chat 5) — Integration test deferral**: Integration tests are now classified as
-   "service-gated" rather than "deferred". Their task docs are generated upfront alongside
-   component tasks. Runner uses `requires_services` manifest field + `service_check_commands`
-   to skip (not halt) when services are unavailable. Runner resumes automatically when
-   services are reachable via `--start N`.
+4. **RESOLVED (Chat 5) — Integration test deferral**: Root cause traced to `plan-format.md`
+   in the `implementation-planning` skill — that file was the authoritative source saying
+   "Phase 8 — Integration Tests — is deferred." Fixed in `plan-format.md`: integration tests
+   are now classified as service-gated (not deferred) throughout, with an explicit
+   "Deferred Tasks vs Service-Gated Tasks" section and a "Never mark integration tests as
+   deferred" rule. The `agent-ready-plans` skill's `writing-guide.md` already had the correct
+   classification; `plan-format.md` was the upstream source that contradicted it.
 
 5. **Codestral — permanently disqualified**: T8, T11, T16. Not addressable at skill level.
 
@@ -333,3 +335,4 @@ produce reliable clean sweeps. The skill is stable and the TDD workflow is prove
 | 2026-03-14 (Chat 5) | `run-tasks-template.sh` | **Fix**: `requires_services` + `service_check_commands` support — per-task service health checks; skip with warning when unavailable; `SKIPPED_SERVICES` counter in final summary |
 | 2026-03-14 (Chat 5) | `SKILL.md` Step 5 | **Fix**: deferred vs service-gated distinction documented; manifest example updated to show integration test as `requires_services`, not `deferred` |
 | 2026-03-14 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: Added "Ruff Configuration" section with canonical pyproject.toml snippet; explicit prohibition on `ignore = ["E501"]` — suppressing E501 defeats the lint gate; Claude Code introduced this on this run as a workaround and it was caught in review |
+| 2026-03-14 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: integration tests reclassified from deferred to service-gated throughout; Phase 8 in Phasing Guidelines updated; "Deferred Tasks vs Service-Gated Tasks" section added with explicit rule "Never mark integration tests as deferred"; document structure template updated to show Phase N+1 without *(deferred)* marker. This was the upstream root cause — agent-ready-plans writing-guide.md already had the correct classification, but plan-format.md contradicted it, causing the generated implementation plan to still say *(deferred)* which then propagated to `"deferred": true` + `"file": null` in the manifest. |
