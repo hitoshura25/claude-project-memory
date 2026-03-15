@@ -224,42 +224,14 @@ Qwen 30B reasons better but fails on non-trivial logic. Spec-based needs ~GPT-4 
 
 | Task | Lines | Notes |
 |------|-------|-------|
-| 01 Settings | 112 | ✅ |
-| 02 UUIDStore | 209 | ✅ — E501s fired (INSERT_SQL 97 chars, SELECT query 105 chars) but Gemini self-fixed in 1 reflection; 0 degraded |
-| 03 BaseExtractor | 90 | ✅ |
-| 04 GDriveClient | 183 | ✅ |
-| 05 MinIOWriter | 195 | ✅ |
-| 06 RabbitMQPublisher | 177 | ✅ — **1 call; no `is_closed` guard; unconditional `connection.close()` in `finally`** |
-| 07 Steps | 57 | ✅ |
-| 08 BloodGlucose | 58 | ✅ |
-| 09 HeartRate | 143 | ✅ — E501 on child query, self-fixed |
-| 10 HRV | 56 | ✅ |
-| 11 Sleep | 145 | ✅ — E501 on stage query, self-fixed |
-| 12–16 Extractors | 57 avg | ✅ all |
+| 06 RabbitMQPublisher | 177 | ✅ — **no `is_closed` guard; unconditional `connection.close()` in `finally`** |
 | 17 Wire DAG | 173 | ✅ — 1 call, 0 E501s |
-| 18 Docker | 103 | ✅ — fell back to global suite; **all 65 tests passed** (task 06 passing resolved the task 18 degradation seen in T19) |
+| 18 Docker | 103 | ✅ — global fallback; 65 tests passed (task 06 clean) |
 | 19 Integration | ⏭ | Services unavailable — correctly skipped |
 
 **Runner summary**: `18 tasks completed, 1 skipped (services unavailable)`
-**Total log lines**: 2,067 (vs Qwen T19's ~3,300 estimate from 337 KB)
 
-#### T20 Analysis
-
-**Gemini clean sweep on the new task set.** Three consecutive clean sweeps for Gemini (T12, T17, T20) across two different task sets and all Chat 5 architectural changes.
-
-**Task 06 RabbitMQ — `is_closed` trap not triggered.** Gemini wrote `connection.close()` unconditionally in `finally` without the `is_closed` guard that trips Qwen. This is a model-level behavioral difference: Gemini doesn't add the guard; Qwen does. The T19 fix (issue #7) should still be implemented to protect Qwen on the next run, but it's a Qwen-specific pattern — not a universal one.
-
-**Task 02 UUIDStore — E501s fired but self-fixed.** Gemini used module-level SQL constants (`CREATE_TABLE_SQL`, `INSERT_SQL`) correctly, but the constant values still exceeded 88 chars on one line each. The ruff wrapper fired, Gemini wrapped them across two lines in one reflection, and continued. No degradation. This shows Gemini is resilient to single-violation E501 spirals that consume Qwen's reflections — the same pattern observed in T17.
-
-**Task 18 Docker — global suite fallback succeeded.** Unlike T19 where task 06 was already failing when Docker ran, here task 06 passed cleanly so the global suite (65 tests) passed. Confirms that issue #8 (null vs empty `test_command`) is a real structural problem independent of this run — Docker was lucky here only because task 06 succeeded first.
-
-**Efficiency**: 2,067 lines vs Qwen's larger log. Gemini continues to be more token-efficient per task. The extractors (07–16) averaged ~57 lines each — compact single-call completions.
-
-#### T20 confirms T19 issues still actionable
-
-Issue #7 (pika `is_closed` trap) is a Qwen-specific pattern — Gemini doesn't exhibit it. Still needs to be fixed in `python-pytest.md` to protect Qwen on the next run.
-
-Issue #8 (null vs empty `test_command`) remains a structural runner problem. T20 happened to avoid the failure because task 06 was clean, but the fallback to the global suite for infrastructure tasks is still wrong by design.
+**Key findings:** `is_closed` trap is Qwen-specific — Gemini writes unconditional `finally` naturally. Docker global fallback is structurally fragile (safe here only because task 06 passed).
 
 ---
 
@@ -271,15 +243,12 @@ Issue #8 (null vs empty `test_command`) remains a structural runner problem. T20
 | Pass rate | 18/18 ✅ | 18/18 ✅ | 18/18 ✅ | 17/19 ✅ |
 | Degraded | 0 | 0 | 1 ⚠️ (pass) | 2 ⚠️ (addressable) |
 | Skipped | N/A | 1 ⏭ (correct) | N/A | 1 ⏭ (correct) |
-| Log lines | 1,501 | 2,067 | 1,587 | ~3,300 est. |
-| Wire DAG calls | 1 | 1 | 1 | 1 |
 | UUIDStore E501 | 0 | self-fixed | 8 (degraded) | **0** |
 | RabbitMQ `is_closed` | not triggered | not triggered | not triggered | ⚠️ degraded |
-| Docker global fallback | passed | passed | passed | ⚠️ degraded (cascaded from task 06) |
 
 **Standings:**
-- **Gemini 3.1 Flash Lite**: three clean sweeps (T12, T17, T20). Consistent on both task sets. More token-efficient, self-fixes E501s. Reference model.
-- **Qwen 3 Coder 30B**: clean sweeps on original task set (T15, T18), one new failure on new task set (T19, pika `is_closed` trap). Two addressable issues identified. Reliable local model pending issue #7 fix.
+- **Gemini 3.1 Flash Lite**: three clean sweeps (T12, T17, T20). Reference model.
+- **Qwen 3 Coder 30B**: clean on original task set (T15, T18); one new failure on new task set (T19, pika trap). Pending issue #7 fix.
 - **Codestral 22B**: permanently disqualified.
 
 ---
@@ -288,7 +257,7 @@ Issue #8 (null vs empty `test_command`) remains a structural runner problem. T20
 
 1. **RESOLVED — Wire DAG callable body snippets**: T15/T17/T18/T19/T20 all confirmed.
 
-2. **RESOLVED (Chat 5) — UUIDStore SQL E501**: Confirmed fixed in T19 (Qwen 0 E501s) and T20 (Gemini self-fixed in 1 reflection).
+2. **RESOLVED (Chat 5) — UUIDStore SQL E501**: Confirmed fixed in T19 (Qwen 0 E501s) and T20 (Gemini self-fixed).
 
 3. **ACTIONABLE — Runner: pre-task file backup + restore on critical export loss**.
 
@@ -298,18 +267,15 @@ Issue #8 (null vs empty `test_command`) remains a structural runner problem. T20
 
 6. **Context length floor — 32k (Qwen/MLX)**.
 
-7. **ACTIONABLE (T19, Qwen-specific) — RabbitMQ `is_closed` mock trap**: Qwen guards
-   `connection.close()` with `not connection.is_closed`. `MagicMock.is_closed` is truthy,
-   so close is never called. Gemini does not exhibit this pattern (T20 confirmed).
-   Fix: add explicit `finally` block snippet to pika fixture section in `python-pytest.md`,
-   showing `if connection is not None: connection.close()` and prohibiting the `is_closed`
-   guard. Also add `mock_conn.is_closed = False` to the conftest fixture as a defensive
-   measure so the guard works even if models use it.
+7. **RESOLVED (Chat 5) — RabbitMQ `is_closed` mock trap**: Fixed in `python-pytest.md`:
+   (a) `mock_conn.is_closed = False` added to the pika fixture so the guard evaluates
+   correctly even if models use it; (b) "Pika Connection Lifecycle Trap" section added
+   documenting the failure mode, showing the correct unconditional `finally` pattern, and
+   prohibiting the `is_closed` guard in task doc Behavior sections.
 
 8. **ACTIONABLE (T19/T20) — Docker task `test_command` null vs empty string**: Empty `""`
    triggers the runner's global-suite fallback, which is only safe when all prior tasks pass.
-   Tasks with no unit tests must use `null`. Fix in runner: treat `""` as `null` (no-test,
-   no fallback). Fix in SKILL.md manifest example: show `"test_command": null` for infra tasks.
+   Under discussion — may remove the fallback entirely rather than fix null vs empty handling.
 
 ---
 
@@ -351,4 +317,4 @@ Issue #8 (null vs empty `test_command`) remains a structural runner problem. T20
 | 2026-03-14 (Chat 5) | `SKILL.md` Step 5 | **Fix**: deferred vs service-gated distinction |
 | 2026-03-14 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: Ruff config section; prohibit `ignore = ["E501"]` |
 | 2026-03-14 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: integration tests service-gated throughout; upstream root cause of deferred manifest entries |
-| 2026-03-15 (T19/T20, Chat 5) | Open issues logged | RabbitMQ `is_closed` trap (#7, Qwen-specific); Docker null vs empty test_command (#8) |
+| 2026-03-15 (T19/T20, Chat 5) | `references/stacks/python-pytest.md` | **Fix**: pika `is_closed` mock trap — added `mock_conn.is_closed = False` to fixture; added "Pika Connection Lifecycle Trap" section with correct `finally` pattern and task doc guidance |
