@@ -98,18 +98,65 @@ Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structur
 
 ---
 
+### Trial Set 21 — Qwen on Revised Task Set with Infra Support (2026-03-16)
+**Log**: `run-20260316-112706.log` (385 KB)
+**Model**: Qwen 3 Coder 30B (via LM Studio)
+**Skill state**: Post Chat 5 — new task set with Docker deployment task (task 17) and hard-fail integration test (task 18)
+**Result**: **16/18 ✅, 1 degraded ⚠️ (task 17 Docker), 1 hard-fail ❌ (task 18 — services unavailable)**
+
+| Task | Result | Notes |
+|------|--------|-------|
+| 01–05 | ✅ all | UUIDStore, extractors, writers — RabbitMQ `is_closed` fix confirmed |
+| 06–15 | ✅ all | All 10 extractors clean |
+| 16 Wire DAG | ✅ | |
+| 17 Docker | ⚠️ | Wrong base image tag in task doc spec — `apache/airflow:2.9-python3.11` doesn't exist on Docker Hub |
+| 18 Integration | ❌ | Hard-fail: minio, rabbitmq unavailable — **correct behavior**, runner printed `--start 18` resume instruction |
+
+**Runner summary**: `16 tasks completed, 1 degraded, 1 hard-fail (services unavailable)`
+
+#### T21 Root Cause Analysis
+
+**Task 17 — Wrong Airflow image tag (task doc authoring error):**
+
+The task doc's Dockerfile spec embedded `FROM apache/airflow:2.9-python3.11`. That tag does not exist on Docker Hub — the correct format is `apache/airflow:2.9.0-python3.11` (with patch version). Every smoke test attempt failed immediately at `docker build` with `failed to resolve source metadata`. Qwen correctly identified the issue in reflection ("A valid tag would be `apache/airflow:2.9.0-python3.11` or similar") but the task doc spec was authoritative and the model couldn't override it. All 3 reflections consumed on the same pull failure.
+
+This is **not a Qwen failure** — the task doc contained incorrect content that no small model could fix. It is a **Claude Code authoring gap**: Step 3b validation of the smoke test should have caught this. Running `bash smoke-test-airflow-ingestion.sh` during scaffold validation would have failed immediately with the same image pull error, surfacing the wrong tag before the task doc was finalised.
+
+**Secondary: hadolint warnings not blocking lint gate:**
+
+hadolint fired `DL3013` (unversioned `pip install uv`) and `DL3002` (last USER is root) as warnings. hadolint exits 0 on warnings by default, so these didn't block the run. However, both violations were introduced by the Dockerfile spec in the task doc itself — meaning the spec wasn't hadolint-clean before being embedded. The Layer 0 lint gate (`hadolint` run against the spec content) should have caught these before the task doc was written.
+
+**Task 18 hard-fail — correct behavior confirmed:**
+
+Runner exited with a clear message identifying minio and rabbitmq as unavailable, printed the `--start 18` resume command, and stopped. No degraded marker, no silent skip — exactly the intended behavior from the runner redesign.
+
+**URL scraping noise at task 17 start:**
+
+The `ERR_CONNECTION_REFUSED` errors at the very start of task 17 are aider's own context-gathering — it attempted to fetch the URLs mentioned in the task doc (health endpoint, MinIO) before sending to the model. This is normal aider behavior, not a failure.
+
+#### T21 Required Fixes (two actionable issues)
+
+**Fix 1 — `stacks/infra.md` Step 3b validation**: Add an explicit pre-flight check to the "Validate the smoke test before embedding" section: run `docker manifest inspect <base-image-tag>` to verify the tag exists before writing the Dockerfile spec into the task doc. If the tag doesn't exist, look up the correct tag and fix it before proceeding. This is the upstream fix — it catches wrong tags at Claude Code authoring time, not at model execution time.
+
+**Fix 2 — `stacks/infra.md` Layer 0 lint gate for Dockerfiles**: The Dockerfile spec embedded in task docs must be hadolint-clean before it's written into the task doc. Add an explicit "run hadolint against the spec content before embedding" step, analogous to the ruff Layer 0 gate for Python test files. Any DL* warnings in the spec must be resolved first. Common patterns to check: `DL3002` (last USER must not be root — switch back to `USER airflow` after root steps), `DL3013` (pin pip versions), `DL3042` (use `--no-cache-dir`).
+
+---
+
 ## Model Comparison Summary
 
-| Metric | Gemini T20 | Qwen T19 |
+| Metric | Gemini T20 | Qwen T21 |
 |--------|------------|----------|
-| Task set | New (Chat 5) | New (Chat 5) |
-| Pass rate | 18/18 ✅ | 17/19 ✅ |
-| Degraded | 0 | 2 ⚠️ (addressable) |
-| UUIDStore E501 | self-fixed | **0** (SQL constants fix confirmed) |
+| Task set | New (Chat 5) | New (Chat 5) + infra |
+| Pass rate | 18/18 ✅ | 16/18 ✅ |
+| Degraded | 0 | 1 ⚠️ (task doc error, not model) |
+| Hard-fail | 0 | 1 ❌ (services — correct behavior) |
+| RabbitMQ `is_closed` | not triggered | ✅ confirmed fixed (task 05 passed) |
+| Docker smoke test | N/A | ⚠️ wrong base image tag in spec |
+| Integration hard-fail | N/A | ✅ correct behavior |
 
 **Standings:**
 - **Gemini 3.1 Flash Lite**: three clean sweeps (T12, T17, T20). Reference model.
-- **Qwen 3 Coder 30B**: clean on original task set (T15, T18); two addressable failures on new task set (T19). Issues #7 and #8 resolved in Chat 5.
+- **Qwen 3 Coder 30B**: consistent on service tasks; Docker degradation is a task doc authoring error, not a model failure. Issues #7 and #8 fully resolved. Two new upstream fixes identified for infra.md.
 - **Codestral 22B**: permanently disqualified.
 
 ---
@@ -124,6 +171,8 @@ Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structur
 6. **Context length floor — 32k (Qwen/MLX)**
 7. **RESOLVED (Chat 5) — RabbitMQ `is_closed` mock trap**
 8. **RESOLVED (Chat 5) — Docker task test_command / runner redesign + upstream plan-format.md**
+9. **ACTIONABLE (T21) — Base image tag verification**: `stacks/infra.md` Step 3b must require `docker manifest inspect <tag>` before writing Dockerfile spec into task doc. Wrong tag = immediate smoke test failure that no model can fix.
+10. **ACTIONABLE (T21) — Dockerfile Layer 0 hadolint gate**: `stacks/infra.md` must require running hadolint against the Dockerfile spec content before embedding in the task doc. Common violations to check: `DL3002` (last USER not root), `DL3013` (pin pip versions), `DL3042` (--no-cache-dir).
 
 ---
 
@@ -164,10 +213,11 @@ Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structur
 | 2026-03-14 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: integration tests service-gated throughout |
 | 2026-03-15 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: pika `is_closed` mock trap — fixture + Pika Connection Lifecycle Trap section |
 | 2026-03-15 (Chat 5) | `references/stacks/infra.md` | **New**: Infrastructure stack file — Docker/compose tooling, two-compose pattern, smoke test setup, hadolint, sequencing principle, Terraform/k8s stub |
-| 2026-03-15 (Chat 5) | `scripts/docker-smoke-test-template.sh` | **New**: Parameterised Docker smoke test template — build, --wait, health poll, assertions, cleanup trap |
-| 2026-03-15 (Chat 5) | `scripts/infra-lint-wrapper-template.sh` | **New**: Infrastructure lint wrapper — routes Dockerfiles→hadolint, compose→docker compose config, Python→ruff |
-| 2026-03-15 (Chat 5) | `references/tooling.md` | **Fix**: Added "Mixed-Technology Projects" section with detection table and pointer to stacks/infra.md; updated stack file table to include infra.md |
-| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: Per-task `lint_cmd` override; removed global-suite fallback; `requires_services` hard-fail |
-| 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, infra tooling setup, smoke test validation, manifest example, Bundled Resources |
-| 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: (1) Document structure template adds Phase N+1 Deployment between Wiring and Integration Tests; (2) Phase table description updated — Phase 7 Deployment now described, Phase 8 says hard-fail not skip; (3) Phase 7 Deployment guidance added — two-compose pattern, smoke test scenario, per-task lint_cmd, what the model creates; (4) Phase 8 Integration Tests description corrected — runner exits on unavailable services, not skips; (5) Deferred/service-gated table updated — "exits with an error" not "skips"; (6) Deployment task test scenario section added; (7) Sizing guidance updated — deployment tasks always create exactly three files |
-| 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: (1) Step 2 "Flag deferred tasks" bullet replaced — integration tests are service-gated (hard-fail), not deferred; (2) Step 2 adds "Deployment tasks" bullet describing two-compose pattern; (3) Step 3 validation checklist updated — deployment tasks check for both compose files, integration tests check for `Requires services:` not deferred; (4) Step 4 hand-off template shows Phase 7 Deployment and updated Phase 8 description |
+| 2026-03-15 (Chat 5) | `scripts/docker-smoke-test-template.sh` | **New**: Parameterised Docker smoke test template |
+| 2026-03-15 (Chat 5) | `scripts/infra-lint-wrapper-template.sh` | **New**: Infrastructure lint wrapper |
+| 2026-03-15 (Chat 5) | `references/tooling.md` | **Fix**: Mixed-Technology Projects section; infra.md in stack table |
+| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: Per-task `lint_cmd` override; no global-suite fallback; `requires_services` hard-fail |
+| 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, setup, smoke test validation, manifest example |
+| 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment in template; Phase 7 guidance; hard-fail language throughout |
+| 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks bullet; validation checklist updated |
+| 2026-03-16 (T21, Chat 5) | Open issues logged | Base image tag verification (#9); Dockerfile Layer 0 hadolint gate (#10) |
