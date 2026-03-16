@@ -88,8 +88,8 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 6. **Context length floor** — 32k (Qwen/MLX)
 7. **RESOLVED** — RabbitMQ `is_closed` mock trap (Chat 5)
 8. **RESOLVED** — Docker task test_command / runner redesign (Chat 5)
-9. **ACTIONABLE (T21/T22)** — Base image tag verification: `stacks/infra.md` Step 3b must require `docker manifest inspect <tag>` before writing Dockerfile spec.
-10. **ACTIONABLE (T21/T22)** — Dockerfile Layer 0 validation gate: Must run hadolint AND attempt an actual `docker build` against the spec before embedding in task doc.
+9. **RESOLVED (Chat 6)** — Base image tag verification: `stacks/infra.md` § "Base Image Verification" — `docker manifest inspect` + Docker Hub API fallback before writing Dockerfile spec.
+10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs required before embedding spec in task doc. Generic (no templates), catches both tag errors and base-image-specific constraints (e.g. pip/USER).
 
 ---
 
@@ -138,6 +138,9 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment in template; Phase 7 guidance; hard-fail language throughout |
 | 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks bullet; validation checklist updated |
 | 2026-03-16 (T21/T22) | Open issues logged | Base image tag verification (#9); Dockerfile Layer 0 validation gate (#10) |
+| 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification section — `docker manifest inspect` + `docker build` gate before embedding Dockerfile spec |
+| 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification integrated into infra task setup and validation |
+| 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment tasks specify image family not exact tag; Claude Code resolves via `docker manifest inspect`; Phase 7 updated |
 
 ---
 
