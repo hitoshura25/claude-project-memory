@@ -85,7 +85,7 @@ See prior chat history. Summary: TDD approach validated, Codestral disqualified,
 **Model**: Qwen 3 Coder 30B (via LM Studio)
 **Result**: **17/19 ✅, 2 degraded ⚠️ (tasks 06, 18), 1 skipped ⏭ (task 19)**
 
-Root causes: (1) Qwen `is_closed` mock trap on pika connection; (2) empty `test_command` → global fallback → Docker task cascaded on task 06 failure.
+Root causes: (1) Qwen `is_closed` mock trap; (2) empty `test_command` → global fallback cascade.
 
 ---
 
@@ -94,70 +94,89 @@ Root causes: (1) Qwen `is_closed` mock trap on pika connection; (2) empty `test_
 **Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
 **Result**: **18/18 ✅, 0 degraded, 1 skipped ⏭ (task 19)**
 
-Key findings: `is_closed` trap is Qwen-specific; Docker global fallback structurally fragile.
-
 ---
 
 ### Trial Set 21 — Qwen on Revised Task Set with Infra Support (2026-03-16)
 **Log**: `run-20260316-112706.log` (385 KB)
 **Model**: Qwen 3 Coder 30B (via LM Studio)
-**Skill state**: Post Chat 5 — new task set with Docker deployment task (task 17) and hard-fail integration test (task 18)
 **Result**: **16/18 ✅, 1 degraded ⚠️ (task 17 Docker), 1 hard-fail ❌ (task 18 — services unavailable)**
 
-| Task | Result | Notes |
-|------|--------|-------|
-| 01–05 | ✅ all | UUIDStore, extractors, writers — RabbitMQ `is_closed` fix confirmed |
-| 06–15 | ✅ all | All 10 extractors clean |
-| 16 Wire DAG | ✅ | |
-| 17 Docker | ⚠️ | Wrong base image tag in task doc spec — `apache/airflow:2.9-python3.11` doesn't exist on Docker Hub |
-| 18 Integration | ❌ | Hard-fail: minio, rabbitmq unavailable — **correct behavior**, runner printed `--start 18` resume instruction |
-
-**Runner summary**: `16 tasks completed, 1 degraded, 1 hard-fail (services unavailable)`
-
-#### T21 Root Cause Analysis
-
-**Task 17 — Wrong Airflow image tag (task doc authoring error):**
-
-The task doc's Dockerfile spec embedded `FROM apache/airflow:2.9-python3.11`. That tag does not exist on Docker Hub — the correct format is `apache/airflow:2.9.0-python3.11` (with patch version). Every smoke test attempt failed immediately at `docker build` with `failed to resolve source metadata`. Qwen correctly identified the issue in reflection ("A valid tag would be `apache/airflow:2.9.0-python3.11` or similar") but the task doc spec was authoritative and the model couldn't override it. All 3 reflections consumed on the same pull failure.
-
-This is **not a Qwen failure** — the task doc contained incorrect content that no small model could fix. It is a **Claude Code authoring gap**: Step 3b validation of the smoke test should have caught this. Running `bash smoke-test-airflow-ingestion.sh` during scaffold validation would have failed immediately with the same image pull error, surfacing the wrong tag before the task doc was finalised.
-
-**Secondary: hadolint warnings not blocking lint gate:**
-
-hadolint fired `DL3013` (unversioned `pip install uv`) and `DL3002` (last USER is root) as warnings. hadolint exits 0 on warnings by default, so these didn't block the run. However, both violations were introduced by the Dockerfile spec in the task doc itself — meaning the spec wasn't hadolint-clean before being embedded. The Layer 0 lint gate (`hadolint` run against the spec content) should have caught these before the task doc was written.
-
-**Task 18 hard-fail — correct behavior confirmed:**
-
-Runner exited with a clear message identifying minio and rabbitmq as unavailable, printed the `--start 18` resume command, and stopped. No degraded marker, no silent skip — exactly the intended behavior from the runner redesign.
-
-**URL scraping noise at task 17 start:**
-
-The `ERR_CONNECTION_REFUSED` errors at the very start of task 17 are aider's own context-gathering — it attempted to fetch the URLs mentioned in the task doc (health endpoint, MinIO) before sending to the model. This is normal aider behavior, not a failure.
-
-#### T21 Required Fixes (two actionable issues)
-
-**Fix 1 — `stacks/infra.md` Step 3b validation**: Add an explicit pre-flight check to the "Validate the smoke test before embedding" section: run `docker manifest inspect <base-image-tag>` to verify the tag exists before writing the Dockerfile spec into the task doc. If the tag doesn't exist, look up the correct tag and fix it before proceeding. This is the upstream fix — it catches wrong tags at Claude Code authoring time, not at model execution time.
-
-**Fix 2 — `stacks/infra.md` Layer 0 lint gate for Dockerfiles**: The Dockerfile spec embedded in task docs must be hadolint-clean before it's written into the task doc. Add an explicit "run hadolint against the spec content before embedding" step, analogous to the ruff Layer 0 gate for Python test files. Any DL* warnings in the spec must be resolved first. Common patterns to check: `DL3002` (last USER must not be root — switch back to `USER airflow` after root steps), `DL3013` (pin pip versions), `DL3042` (use `--no-cache-dir`).
+Root cause: Wrong Airflow image tag in task doc spec (`2.9-python3.11` doesn't exist; `2.9.0-python3.11` does). Task doc authoring error — Qwen correctly diagnosed it but couldn't override the spec. Hard-fail on task 18 confirmed correct.
 
 ---
 
-## Model Comparison Summary
+### Trial Set 22 — Gemini on Revised Task Set with Infra Support (2026-03-16)
+**Log**: `run-20260316-121437.log` (483 KB)
+**Model**: `gemini/gemini-3.1-flash-lite-preview` (Gemini API)
+**Skill state**: Identical to T21 — same task set, no skill changes between runs
+**Result**: **16/18 ✅, 1 degraded ⚠️ (task 17 Docker), 1 hard-fail ❌ (task 18 — services unavailable)**
 
-| Metric | Gemini T20 | Qwen T21 |
+| Task | Lines | Notes |
+|------|-------|-------|
+| 01 UUIDStore | 108 | ✅ |
+| 02 BaseExtractor | 176 | ✅ |
+| 03 GDriveClient | 161 | ✅ |
+| 04 MinIOWriter | 103 | ✅ |
+| 05 RabbitMQ | 81 | ✅ — `is_closed` fix confirmed again |
+| 06–15 Extractors | ~59 avg | ✅ all |
+| 16 Wire DAG | 159 | ✅ |
+| 17 Docker | 3572 | ⚠️ — see below |
+| 18 Integration | ❌ | Hard-fail: services unavailable — correct |
+
+**Runner summary**: `16 tasks completed, 1 degraded, 1 hard-fail (services unavailable)`
+**Task 17 LLM calls: 27** (vs Qwen T21's 3) — massive spiral
+
+#### T22 Root Cause Analysis
+
+**Task 17 — Same image tag error, but Gemini's recovery exposed a second problem:**
+
+Gemini followed the same cascade as Qwen:
+1. Attempt 1: Wrote spec-as-given (`FROM apache/airflow:2.9-python3.11`) + fixed hadolint warnings (`DL3013`, `DL3042`). Build failed: image tag not found.
+2. Attempt 2: Fixed the image tag (`2.9.1-python3.11`) — but was still running `pip install` as `USER root` inside the official Airflow image. The Airflow base image actively blocks root pip installs ("You are running pip as root. Please use 'airflow' user!"). Build failed: `pip install` exit code 1.
+3. Attempt 3: Moved `pip install --user` under `USER airflow`. But `pip install --user` inside an Airflow container doesn't work either — the pip binary doesn't exist for the airflow user, and uv isn't on PATH. Build failed: exit code 1.
+
+After attempt 3, Gemini hit the **free-tier input token quota** (250,000 tokens/session). The aider summarizer failed with "cannot schedule new futures after shutdown", consuming the final reflection slot on a garbled output. The run degraded.
+
+**The underlying issue is that the Dockerfile spec itself is structurally wrong** for the Airflow base image:
+- The official `apache/airflow` image already has pip-as-airflow configured; it doesn't allow root pip
+- `RUN pip install uv` should be `RUN pip install --no-cache-dir uv` run **as airflow**, or better: use `pip install --constraint "..." uv` following Airflow's recommended pattern
+- The correct approach for installing uv in an Airflow container is either as the `airflow` user with the right PATH, or using the Airflow-provided pip wrapper
+
+This is still fundamentally a **task doc authoring error** — the Dockerfile spec was not validated against the actual base image's constraints before being embedded. The correct fix remains issues #9 and #10: verify the image tag exists and run hadolint (and attempt an actual build) before finalising the spec.
+
+**T22 vs T21 comparison on task 17:**
+
+| | Qwen T21 | Gemini T22 |
+|---|---|---|
+| LLM calls | 3 | 27 |
+| Image tag identified | ✅ (in reflection) | ✅ (fixed in attempt 2) |
+| Got past image pull | ❌ | ✅ |
+| Hit pip/USER issue | ❌ | ✅ (new failure mode) |
+| Quota exhaustion | No | Yes (free tier) |
+| Final failure | Image not found | pip exit code 1 + quota |
+
+Gemini made more progress but uncovered a second layer of the same fundamental problem. Both failures trace to the same root cause: the Dockerfile spec was not validated against the real image before being written.
+
+**Task 18 hard-fail — correct behavior confirmed again (two runs).**
+
+---
+
+## Model Comparison Summary — T21/T22
+
+| Metric | Gemini T22 | Qwen T21 |
 |--------|------------|----------|
-| Task set | New (Chat 5) | New (Chat 5) + infra |
-| Pass rate | 18/18 ✅ | 16/18 ✅ |
-| Degraded | 0 | 1 ⚠️ (task doc error, not model) |
-| Hard-fail | 0 | 1 ❌ (services — correct behavior) |
-| RabbitMQ `is_closed` | not triggered | ✅ confirmed fixed (task 05 passed) |
-| Docker smoke test | N/A | ⚠️ wrong base image tag in spec |
-| Integration hard-fail | N/A | ✅ correct behavior |
+| Task set | Revised + infra | Revised + infra |
+| Tasks 01–16 | 16/16 ✅ | 16/16 ✅ |
+| Task 17 Docker | ⚠️ 27 calls, quota hit | ⚠️ 3 calls, image not found |
+| Task 18 Integration | ❌ hard-fail (correct) | ❌ hard-fail (correct) |
+| Root cause | Same task doc error; Gemini got further but hit pip/USER constraint + quota | Same task doc error; stopped at image pull |
 
-**Standings:**
-- **Gemini 3.1 Flash Lite**: three clean sweeps (T12, T17, T20). Reference model.
-- **Qwen 3 Coder 30B**: consistent on service tasks; Docker degradation is a task doc authoring error, not a model failure. Issues #7 and #8 fully resolved. Two new upstream fixes identified for infra.md.
-- **Codestral 22B**: permanently disqualified.
+**Common finding:** Both models confirm the same two upstream skill fixes are needed (issues #9, #10). The task doc is wrong regardless of which model runs it. Once the Dockerfile spec is corrected and validated, both models should pass task 17.
+
+**Standings unchanged:**
+- **Gemini 3.1 Flash Lite**: reference model; quota exhaustion on T22 is a free-tier limit artifact, not a reliability regression
+- **Qwen 3 Coder 30B**: consistent on service tasks; same Docker degradation as Gemini
+- **Codestral 22B**: permanently disqualified
 
 ---
 
@@ -170,9 +189,9 @@ The `ERR_CONNECTION_REFUSED` errors at the very start of task 17 are aider's own
 5. **Codestral — permanently disqualified**
 6. **Context length floor — 32k (Qwen/MLX)**
 7. **RESOLVED (Chat 5) — RabbitMQ `is_closed` mock trap**
-8. **RESOLVED (Chat 5) — Docker task test_command / runner redesign + upstream plan-format.md**
-9. **ACTIONABLE (T21) — Base image tag verification**: `stacks/infra.md` Step 3b must require `docker manifest inspect <tag>` before writing Dockerfile spec into task doc. Wrong tag = immediate smoke test failure that no model can fix.
-10. **ACTIONABLE (T21) — Dockerfile Layer 0 hadolint gate**: `stacks/infra.md` must require running hadolint against the Dockerfile spec content before embedding in the task doc. Common violations to check: `DL3002` (last USER not root), `DL3013` (pin pip versions), `DL3042` (--no-cache-dir).
+8. **RESOLVED (Chat 5) — Docker task test_command / runner redesign**
+9. **ACTIONABLE (T21/T22) — Base image tag verification**: `stacks/infra.md` Step 3b must require `docker manifest inspect <tag>` before writing Dockerfile spec. Wrong tag = unrecoverable build failure for any model.
+10. **ACTIONABLE (T21/T22) — Dockerfile Layer 0 validation gate**: Must run hadolint AND attempt an actual `docker build` against the spec before embedding in the task doc. Confirmed that hadolint alone is insufficient — the Airflow base image has runtime constraints (root pip blocked) that only surface during a real build. The full pre-flight: (1) `hadolint Dockerfile`; (2) `docker build` the Dockerfile stub; (3) smoke test the resulting container. If any step fails, fix the spec before writing the task doc.
 
 ---
 
@@ -220,4 +239,4 @@ The `ERR_CONNECTION_REFUSED` errors at the very start of task 17 are aider's own
 | 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, setup, smoke test validation, manifest example |
 | 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment in template; Phase 7 guidance; hard-fail language throughout |
 | 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks bullet; validation checklist updated |
-| 2026-03-16 (T21, Chat 5) | Open issues logged | Base image tag verification (#9); Dockerfile Layer 0 hadolint gate (#10) |
+| 2026-03-16 (T21/T22, Chat 5) | Open issues logged | Base image tag verification (#9); Dockerfile Layer 0 validation gate upgraded to full build (#10) |
