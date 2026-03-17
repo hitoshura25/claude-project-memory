@@ -32,10 +32,11 @@ claude-devtools/
         tooling.md
         stacks/
           python-pytest.md
+          python-pytest/
+            fixture-patterns.md  <- Fixture templates by behavioral pattern
           typescript-jest.md
           kotlin-junit.md
           infra.md             <- Docker/compose/Terraform/k8s tooling
-          fixture-patterns.md  <- Fixture templates by behavioral pattern
       scripts/
         lint-ruff-wrapper.sh
         infra-lint-wrapper-template.sh
@@ -77,7 +78,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **SQL Constants Pattern**: All SQL strings must be assigned to named module-level constants, never inlined in method bodies (eliminates E501 surface).
 - **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
 - **`:memory:` fixture/Behavior pairing**: If a test fixture uses `:memory:`, the task doc Behavior section must include the persistent connection rule. They are a matched pair.
-- **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `fixture-patterns.md`.
+- **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
 
 ---
 
@@ -94,7 +95,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 9. **RESOLVED (Chat 6)** — Base image tag verification: `stacks/infra.md` § "Base Image Verification".
 10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs.
 11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing rule.
-12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `fixture-patterns.md` with behavioral pattern templates + interaction constraints.
+12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `python-pytest/fixture-patterns.md` with behavioral pattern templates + interaction constraints.
 
 ---
 
@@ -147,9 +148,9 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification |
 | 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment tasks specify image family not exact tag |
 | 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: Mandatory `:memory:` fixture/Behavior pairing rule |
-| 2026-03-17 (Chat 6/T24) | `references/stacks/fixture-patterns.md` | **New**: Fixture pattern templates (Capture/Client/Stateful) + interaction rules |
-| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code replaced with pattern summary + pointer to fixture-patterns.md |
-| 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 references fixture-patterns.md; Step 3b adds interaction rule check; Bundled Resources updated |
+| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest/fixture-patterns.md` | **New**: Fixture pattern templates (Capture/Client/Stateful) + interaction rules |
+| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code → pattern summary + pointer to `python-pytest/fixture-patterns.md` |
+| 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `python-pytest/fixture-patterns.md`; Bundled Resources updated |
 
 ---
 
