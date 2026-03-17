@@ -35,6 +35,7 @@ claude-devtools/
           typescript-jest.md
           kotlin-junit.md
           infra.md             <- Docker/compose/Terraform/k8s tooling
+          fixture-patterns.md  <- Fixture templates by behavioral pattern
       scripts/
         lint-ruff-wrapper.sh
         infra-lint-wrapper-template.sh
@@ -57,10 +58,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T23)
+## Model Standings (as of T24)
 
 - **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22 degraded on Docker (task doc authoring error, not model regression).
-- **Qwen 3 Coder 30B**: Reliable local model. Clean sweeps on T15, T18. T23 stalled on UUIDStore due to `:memory:` fixture without Behavior warning — latent test-authoring regression, not model issue.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T23–T24 stalled on Claude Code test-authoring errors (`:memory:` trap, fixture interaction bug). Not model regressions.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Test file corruption and edit format failures are model-level behaviours not addressable through task doc improvements.
 
 ---
@@ -76,6 +77,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **SQL Constants Pattern**: All SQL strings must be assigned to named module-level constants, never inlined in method bodies (eliminates E501 surface).
 - **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
 - **`:memory:` fixture/Behavior pairing**: If a test fixture uses `:memory:`, the task doc Behavior section must include the persistent connection rule. They are a matched pair.
+- **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `fixture-patterns.md`.
 
 ---
 
@@ -89,9 +91,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 6. **Context length floor** — 32k (Qwen/MLX)
 7. **RESOLVED** — RabbitMQ `is_closed` mock trap (Chat 5)
 8. **RESOLVED** — Docker task test_command / runner redesign (Chat 5)
-9. **RESOLVED (Chat 6)** — Base image tag verification: `stacks/infra.md` § "Base Image Verification" — `docker manifest inspect` + Docker Hub API fallback before writing Dockerfile spec.
-10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs required before embedding spec in task doc. Generic (no templates), catches both tag errors and base-image-specific constraints (e.g. pip/USER).
-11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing: `python-pytest.md` Trap 1 now requires persistent connection instruction in task doc Behavior whenever a test uses `:memory:`.
+9. **RESOLVED (Chat 6)** — Base image tag verification: `stacks/infra.md` § "Base Image Verification".
+10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs.
+11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing rule.
+12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `fixture-patterns.md` with behavioral pattern templates + interaction constraints.
 
 ---
 
@@ -140,10 +143,13 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment in template; Phase 7 guidance; hard-fail language throughout |
 | 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks bullet; validation checklist updated |
 | 2026-03-16 (T21/T22) | Open issues logged | Base image tag verification (#9); Dockerfile Layer 0 validation gate (#10) |
-| 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification section — `docker manifest inspect` + `docker build` gate before embedding Dockerfile spec |
-| 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification integrated into infra task setup and validation |
-| 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment tasks specify image family not exact tag; Claude Code resolves via `docker manifest inspect`; Phase 7 updated |
-| 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: Mandatory `:memory:` fixture/Behavior pairing rule in Trap 1 — test fixture and task doc warning must be written together |
+| 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification section — `docker manifest inspect` + `docker build` gate |
+| 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification |
+| 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment tasks specify image family not exact tag |
+| 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: Mandatory `:memory:` fixture/Behavior pairing rule |
+| 2026-03-17 (Chat 6/T24) | `references/stacks/fixture-patterns.md` | **New**: Fixture pattern templates (Capture/Client/Stateful) + interaction rules |
+| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code replaced with pattern summary + pointer to fixture-patterns.md |
+| 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 references fixture-patterns.md; Step 3b adds interaction rule check; Bundled Resources updated |
 
 ---
 
@@ -158,7 +164,7 @@ coding-agent-ready-planning-skill/
     ├── T01-strategy-comparison.md
     ├── T02-tdd-approach.md
     ├── ...
-    └── T23-qwen-memory-trap-regression.md
+    └── T24-qwen-fixture-interaction-bug.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.
