@@ -57,10 +57,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T22)
+## Model Standings (as of T23)
 
 - **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22 degraded on Docker (task doc authoring error, not model regression).
-- **Qwen 3 Coder 30B**: Reliable local model. Clean sweeps on T15, T18. Consistent when task docs follow snippet rules. One persistent cosmetic ⚠️ (UUIDStore lint, tests pass).
+- **Qwen 3 Coder 30B**: Reliable local model. Clean sweeps on T15, T18. T23 stalled on UUIDStore due to `:memory:` fixture without Behavior warning — latent test-authoring regression, not model issue.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Test file corruption and edit format failures are model-level behaviours not addressable through task doc improvements.
 
 ---
@@ -75,6 +75,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **Cascade isolation**: Component tasks create files only; wiring is always a separate task. Component test_commands never include shared files.
 - **SQL Constants Pattern**: All SQL strings must be assigned to named module-level constants, never inlined in method bodies (eliminates E501 surface).
 - **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
+- **`:memory:` fixture/Behavior pairing**: If a test fixture uses `:memory:`, the task doc Behavior section must include the persistent connection rule. They are a matched pair.
 
 ---
 
@@ -90,6 +91,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 8. **RESOLVED** — Docker task test_command / runner redesign (Chat 5)
 9. **RESOLVED (Chat 6)** — Base image tag verification: `stacks/infra.md` § "Base Image Verification" — `docker manifest inspect` + Docker Hub API fallback before writing Dockerfile spec.
 10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs required before embedding spec in task doc. Generic (no templates), catches both tag errors and base-image-specific constraints (e.g. pip/USER).
+11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing: `python-pytest.md` Trap 1 now requires persistent connection instruction in task doc Behavior whenever a test uses `:memory:`.
 
 ---
 
@@ -141,6 +143,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification section — `docker manifest inspect` + `docker build` gate before embedding Dockerfile spec |
 | 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification integrated into infra task setup and validation |
 | 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment tasks specify image family not exact tag; Claude Code resolves via `docker manifest inspect`; Phase 7 updated |
+| 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: Mandatory `:memory:` fixture/Behavior pairing rule in Trap 1 — test fixture and task doc warning must be written together |
 
 ---
 
@@ -155,7 +158,7 @@ coding-agent-ready-planning-skill/
     ├── T01-strategy-comparison.md
     ├── T02-tdd-approach.md
     ├── ...
-    └── T22-gemini-revised-infra.md
+    └── T23-qwen-memory-trap-regression.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.

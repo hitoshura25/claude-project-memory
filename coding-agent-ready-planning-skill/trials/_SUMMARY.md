@@ -26,11 +26,12 @@
 | T20 | 2026-03-15 | Gemini 3.1 Flash Lite | **18/18 ✅**, 1 ⏭ | Third Gemini sweep on new task set |
 | T21 | 2026-03-16 | Qwen 30B | 16/18 ✅, 1 ⚠️, 1 ❌ | Revised + infra; Docker image tag authoring error |
 | T22 | 2026-03-16 | Gemini 3.1 Flash Lite | 16/18 ✅, 1 ⚠️, 1 ❌ | Same image tag error; pip/USER constraint revealed |
+| T23 | 2026-03-16 | Qwen 30B | 0/18 — stalled task 1 | `:memory:` fixture without persistent conn warning; degenerate output loop |
 
 ---
 
-## Model Standings (as of T22)
+## Model Standings (as of T23)
 
 - **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22 degraded on Docker (task doc authoring error, not model).
-- **Qwen 3 Coder 30B**: Reliable local model. Clean sweeps on T15, T18. Consistent when task docs follow snippet rules.
+- **Qwen 3 Coder 30B**: Reliable local model. Clean sweeps on T15, T18. T23 stalled on UUIDStore due to `:memory:` fixture without Behavior warning — latent test-authoring regression, not model issue.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
