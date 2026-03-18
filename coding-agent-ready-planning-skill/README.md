@@ -59,10 +59,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T24)
+## Model Standings (as of T26)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22 degraded on Docker (task doc authoring error, not model regression).
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T23–T24 stalled on Claude Code test-authoring errors (`:memory:` trap, fixture interaction bug). Not model regressions.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22/T26 degraded on Docker (task doc authoring errors, not model regressions).
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T25 Docker task failed on fabricated pinned versions. Not a model regression — task doc should provide pinned versions.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Test file corruption and edit format failures are model-level behaviours not addressable through task doc improvements.
 
 ---
@@ -79,6 +79,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
 - **`:memory:` fixture/Behavior pairing**: If a test fixture uses `:memory:`, the task doc Behavior section must include the persistent connection rule. They are a matched pair.
 - **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
+- **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild. Prevents both model version fabrication (T25) and hadolint DL3013 spirals (T26).
 
 ---
 
@@ -96,6 +97,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs.
 11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing rule.
 12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `python-pytest/fixture-patterns.md` with behavioral pattern templates + interaction constraints.
+13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning: `stacks/infra.md` Step 2 rewritten with `pip freeze` capture flow. Prevents fabricated versions and hadolint DL3013.
 
 ---
 
@@ -151,6 +153,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest/fixture-patterns.md` | **New**: Fixture pattern templates (Capture/Client/Stateful) + interaction rules |
 | 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code → pattern summary + pointer to `python-pytest/fixture-patterns.md` |
 | 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `python-pytest/fixture-patterns.md`; Bundled Resources updated |
+| 2026-03-17 (Chat 6/T25+T26) | `references/stacks/infra.md` | **Fix**: Step 2 rewritten — pip freeze version pinning flow. Build unpinned → capture versions → pin → rebuild → hadolint |
 
 ---
 
@@ -165,7 +168,7 @@ coding-agent-ready-planning-skill/
     ├── T01-strategy-comparison.md
     ├── T02-tdd-approach.md
     ├── ...
-    └── T24-qwen-fixture-interaction-bug.md
+    └── T26-gemini-hadolint-token-limit.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.

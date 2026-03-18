@@ -28,11 +28,13 @@
 | T22 | 2026-03-16 | Gemini 3.1 Flash Lite | 16/18 ✅, 1 ⚠️, 1 ❌ | Same image tag error; pip/USER constraint revealed |
 | T23 | 2026-03-16 | Qwen 30B | 0/18 — stalled task 1 | `:memory:` fixture without persistent conn warning |
 | T24 | 2026-03-17 | Qwen 30B | 3/18 (1 ⚠️, 2 ✅) — stalled task 4 | Capture mock + body assertion contradiction |
+| T25 | 2026-03-17 | Qwen 30B | 16/18 ✅, 1 ⚠️ | Pinned version fabrication (`boto3==1.29.150`) |
+| T26 | 2026-03-17 | Gemini 3.1 Flash Lite | 16/18 ✅, 1 ⚠️ | hadolint DL3013 + token limit; container exit(1) |
 
 ---
 
-## Model Standings (as of T24)
+## Model Standings (as of T26)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22 degraded on Docker (task doc authoring error, not model).
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T23–T24 stalled on Claude Code test-authoring errors (`:memory:` trap, fixture interaction bug). Not model regressions.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22/T26 degraded on Docker (task doc authoring errors, not model regressions).
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T25 Docker task failed on fabricated pinned versions. Not a model regression — task doc should provide pinned versions.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
