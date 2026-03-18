@@ -59,7 +59,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T26)
+## Model Standings (as of T26 / Chat 7)
 
 - **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22/T26 degraded on Docker (task doc authoring errors, not model regressions).
 - **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T25 Docker task failed on fabricated pinned versions. Not a model regression — task doc should provide pinned versions.
@@ -80,6 +80,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **`:memory:` fixture/Behavior pairing**: If a test fixture uses `:memory:`, the task doc Behavior section must include the persistent connection rule. They are a matched pair.
 - **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
 - **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild. Prevents both model version fabrication (T25) and hadolint DL3013 spirals (T26).
+- **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism — the same class of bug as T23/T24 but at the task-doc generation stage.
 
 ---
 
@@ -98,6 +99,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing rule.
 12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `python-pytest/fixture-patterns.md` with behavioral pattern templates + interaction constraints.
 13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning: `stacks/infra.md` Step 2 rewritten with `pip freeze` capture flow. Prevents fabricated versions and hadolint DL3013.
+14. **RESOLVED (Chat 7)** — Test embedding divergence: task docs now reference test files by path instead of embedding copies. Eliminates T23/T24/T27 class of LLM non-determinism bugs where validated on-disk test and task doc copy diverge.
 
 ---
 
@@ -154,6 +156,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code → pattern summary + pointer to `python-pytest/fixture-patterns.md` |
 | 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `python-pytest/fixture-patterns.md`; Bundled Resources updated |
 | 2026-03-17 (Chat 6/T25+T26) | `references/stacks/infra.md` | **Fix**: Step 2 rewritten — pip freeze version pinning flow. Build unpinned → capture versions → pin → rebuild → hadolint |
+| 2026-03-18 (Chat 7) | `task-template.md` | **Redesign**: `## Tests` section references test file by path instead of embedding code. Eliminates copy-divergence bug class. |
+| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 5 updated for reference-by-path; prose tightened (-15 lines) |
+| 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Refactor**: Test embedding → reference-by-path throughout; accumulated prose condensed (-96 lines) |
+| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: "embeds it in the task doc" → "saves to disk, references by path" |
 
 ---
 
