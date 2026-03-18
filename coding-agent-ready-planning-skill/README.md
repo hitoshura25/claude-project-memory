@@ -81,6 +81,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
 - **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild. Prevents both model version fabrication (T25) and hadolint DL3013 spirals (T26).
 - **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism — the same class of bug as T23/T24 but at the task-doc generation stage.
+- **Dockerfile is scaffold, not a task deliverable**: Claude Code writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files. Every Docker task failure (T21, T22, T25, T26) was caused by the model recreating something Claude Code had already verified.
 
 ---
 
@@ -100,6 +101,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `python-pytest/fixture-patterns.md` with behavioral pattern templates + interaction constraints.
 13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning: `stacks/infra.md` Step 2 rewritten with `pip freeze` capture flow. Prevents fabricated versions and hadolint DL3013.
 14. **RESOLVED (Chat 7)** — Test embedding divergence: task docs now reference test files by path instead of embedding copies. Eliminates T23/T24/T27 class of LLM non-determinism bugs where validated on-disk test and task doc copy diverge.
+15. **RESOLVED (Chat 7)** — Dockerfile as scaffold: Claude Code writes, builds, pins, and validates the Dockerfile during Step 3. It stays on disk — the small model only creates compose files. Eliminates T21/T22/T25/T26 class of Docker task failures.
 
 ---
 
@@ -160,6 +162,9 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 5 updated for reference-by-path; prose tightened (-15 lines) |
 | 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Refactor**: Test embedding → reference-by-path throughout; accumulated prose condensed (-96 lines) |
 | 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: "embeds it in the task doc" → "saves to disk, references by path" |
+| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: "Base Image Verification" → "Dockerfile as Scaffold". Dockerfile stays on disk; model only creates compose files. |
+| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes Dockerfile; Step 3b simplified for infra; manifest Dockerfile removed from `files_created` |
+| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment task Dockerfile moves from `Create:` to `Scaffold:`; Phasing Guidelines updated |
 
 ---
 
