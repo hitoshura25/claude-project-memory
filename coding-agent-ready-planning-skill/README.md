@@ -59,10 +59,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T28 / Chat 7)
+## Model Standings (as of T30 / Chat 7)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean (26 calls). Docker exit(1) is task doc gap not model regression.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️ service tasks. E501 on extractors (Avro schema + inline SQL). Docker exit(1) same as Gemini.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean. T30: hard-stop task 3 — Claude Code authoring gap, not model regression.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️. T29: 7✅ 9 degraded — same authoring gap as Gemini T30.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
 ---
@@ -71,20 +71,19 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 - **Fixes must be generic and upstream** in the skill files, never band-aids on individual task docs.
 - **Context length floor**: Do not reduce LM Studio context below 32k. MLX pre-allocates a fixed GPU KV cache; reducing to 12k causes Metal GPU OOM segfaults mid-run (T04).
-- **SQLite traps**: Two documented patterns in `python-pytest.md`: the `:memory:` multi-connection trap and the multi-column IN clause trap.
+- **`:memory:` is the quality standard for SQLite fixtures**: Faster than file-backed, perfect isolation, and enforces correct implementation (persistent `self._conn`). `tmp_path` masks the multi-connection bug — do not use it for SQLite fixtures. See `python-pytest.md` § Trap 1 and `fixture-patterns.md` Pattern 3.
 - **Layer 0 lint gate**: Linter must return zero errors against pre-written test files before they can be embedded in task docs.
 - **Import integrity pattern**: Wiring task docs must enumerate exact class names with explicit instruction not to import anything not listed.
 - **Cascade isolation**: Component tasks create files only; wiring is always a separate task. Component test_commands never include shared files.
 - **SQL Constants Pattern**: All SQL strings must be assigned to named module-level constants, never inlined in method bodies (eliminates E501 surface).
 - **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
-- **`:memory:` fixture/Behavior pairing**: If a test fixture uses `:memory:`, the task doc Behavior section must include the persistent connection rule. They are a matched pair.
 - **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
-- **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild. Prevents both model version fabrication (T25) and hadolint DL3013 spirals (T26).
-- **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism — the same class of bug as T23/T24 but at the task-doc generation stage.
-- **Dockerfile is scaffold, not a task deliverable**: Claude Code writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files. Every Docker task failure (T21, T22, T25, T26) was caused by the model recreating something Claude Code had already verified.
-- **Test compose is scaffold too**: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`. This catches missing env vars and config issues that caused T27/T28 container exit(1).
-- **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads — single-line forms trigger E501 lint spirals (T27 exhausted reflections on 3 extractor tasks).
-- **Skill content must not reference trial numbers or chat-specific history**. Trial references (T21, T27, etc.) are meaningless to Claude Code. Skill guidance should explain the *principle* and *why*, not cite historical incidents. Trial-specific details belong in the README and trial files, not in skill content.
+- **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild.
+- **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism.
+- **Dockerfile is scaffold, not a task deliverable**: Claude Code writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files.
+- **Test compose is scaffold too**: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`.
+- **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads.
+- **Skill content must not reference trial numbers or chat-specific history**. Trial references are meaningless to Claude Code. Skill guidance should explain the *principle* and *why*, not cite historical incidents.
 
 ---
 
@@ -98,15 +97,16 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 6. **Context length floor** — 32k (Qwen/MLX)
 7. **RESOLVED** — RabbitMQ `is_closed` mock trap (Chat 5)
 8. **RESOLVED** — Docker task test_command / runner redesign (Chat 5)
-9. **RESOLVED (Chat 6)** — Base image tag verification: `stacks/infra.md` § "Base Image Verification".
-10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate: `docker build` against stubs.
+9. **RESOLVED (Chat 6)** — Base image tag verification.
+10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate.
 11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing rule.
-12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules: `python-pytest/fixture-patterns.md` with behavioral pattern templates + interaction constraints.
-13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning: `stacks/infra.md` Step 2 rewritten with `pip freeze` capture flow. Prevents fabricated versions and hadolint DL3013.
-14. **RESOLVED (Chat 7)** — Test embedding divergence: task docs now reference test files by path instead of embedding copies. Eliminates T23/T24/T27 class of LLM non-determinism bugs where validated on-disk test and task doc copy diverge.
-15. **RESOLVED (Chat 7)** — Dockerfile as scaffold: Claude Code writes, builds, pins, and validates the Dockerfile during Step 3. It stays on disk — the small model only creates compose files. Eliminates T21/T22/T25/T26 class of Docker task failures.
-16. **RESOLVED (Chat 7/T27+T28)** — Test compose as scaffold: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait` during Step 3. Eliminates T27/T28 missing env var class (container exit(1)).
-17. **RESOLVED (Chat 7/T27+T28)** — Long-literal E501 surface: `writing-guide.md` now requires multi-line form for SQL queries, Avro schemas, and nested dicts in Behavior sections. Same principle as SQL constants and wiring snippets.
+12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules.
+13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning.
+14. **RESOLVED (Chat 7)** — Test embedding divergence.
+15. **RESOLVED (Chat 7)** — Dockerfile as scaffold.
+16. **RESOLVED (Chat 7/T27+T28)** — Test compose as scaffold.
+17. **RESOLVED (Chat 7/T27+T28)** — Long-literal E501 surface.
+18. **RESOLVED (Chat 7/T29+T30)** — `:memory:` enforced as quality standard. Fixture template uses `:memory:` only (no `tmp_path` option). `tmp_path` masks the multi-connection bug; `:memory:` catches it immediately. Eliminates the T23/T29/T30 class of failures.
 
 ---
 
@@ -134,44 +134,42 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-10 | `references/writing-guide.md` | **Fix**: component/wiring structural separation; Deferred Tasks updated |
 | 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example |
 | 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation |
-| 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects in interface contracts |
-| 2026-03-12 | `references/writing-guide.md` | **Fix**: Three-Layer Validation Gate; Layer 0 lint gate; Deferred Tasks clarified |
+| 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects |
+| 2026-03-12 | `references/writing-guide.md` | **Fix**: Three-Layer Validation Gate; Layer 0 lint gate |
 | 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: SQLite Trap Patterns |
 | 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks no longer deferred; `import_integrity` mandatory |
 | 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section; import integrity check |
-| 2026-03-13 (pass 1–3) | `references/writing-guide.md` | **Fix**: Unconditional code snippets for wiring callable bodies (three passes) |
+| 2026-03-13 (pass 1–3) | `references/writing-guide.md` | **Fix**: Unconditional code snippets for wiring callable bodies |
 | 2026-03-14 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: SQL Constants Pattern; Ruff config; E501 suppression prohibition |
 | 2026-03-14 (Chat 5) | `references/writing-guide.md` | **Fix**: Deferred vs Service-Gated Tasks section |
 | 2026-03-14 (Chat 5) | `run-tasks-template.sh` | **Fix**: `requires_services` + `service_check_commands` support |
 | 2026-03-14 (Chat 5) | `SKILL.md` Step 5 | **Fix**: deferred vs service-gated distinction |
 | 2026-03-14 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: integration tests service-gated throughout |
-| 2026-03-15 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: pika `is_closed` mock trap — fixture + Pika Connection Lifecycle Trap section |
-| 2026-03-15 (Chat 5) | `references/stacks/infra.md` | **New**: Infrastructure stack file — Docker/compose tooling |
+| 2026-03-15 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: pika `is_closed` mock trap |
+| 2026-03-15 (Chat 5) | `references/stacks/infra.md` | **New**: Infrastructure stack file |
 | 2026-03-15 (Chat 5) | `scripts/docker-smoke-test-template.sh` | **New**: Parameterised Docker smoke test template |
 | 2026-03-15 (Chat 5) | `scripts/infra-lint-wrapper-template.sh` | **New**: Infrastructure lint wrapper |
-| 2026-03-15 (Chat 5) | `references/tooling.md` | **Fix**: Mixed-Technology Projects section; infra.md in stack table |
-| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: Per-task `lint_cmd` override; no global-suite fallback; `requires_services` hard-fail |
-| 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, setup, smoke test validation, manifest example |
-| 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment in template; Phase 7 guidance; hard-fail language throughout |
-| 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks bullet; validation checklist updated |
-| 2026-03-16 (T21/T22) | Open issues logged | Base image tag verification (#9); Dockerfile Layer 0 validation gate (#10) |
-| 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification section — `docker manifest inspect` + `docker build` gate |
+| 2026-03-15 (Chat 5) | `references/tooling.md` | **Fix**: Mixed-Technology Projects section |
+| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: Per-task `lint_cmd` override; `requires_services` hard-fail |
+| 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, setup, smoke test validation |
+| 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment; hard-fail language |
+| 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks |
+| 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification + `docker build` gate |
 | 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification |
-| 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment tasks specify image family not exact tag |
-| 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: Mandatory `:memory:` fixture/Behavior pairing rule |
-| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest/fixture-patterns.md` | **New**: Fixture pattern templates (Capture/Client/Stateful) + interaction rules |
-| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code → pattern summary + pointer to `python-pytest/fixture-patterns.md` |
-| 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `python-pytest/fixture-patterns.md`; Bundled Resources updated |
-| 2026-03-17 (Chat 6/T25+T26) | `references/stacks/infra.md` | **Fix**: Step 2 rewritten — pip freeze version pinning flow. Build unpinned → capture versions → pin → rebuild → hadolint |
-| 2026-03-18 (Chat 7) | `task-template.md` | **Redesign**: `## Tests` section references test file by path instead of embedding code |
-| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 5 updated for reference-by-path; prose tightened (-15 lines) |
-| 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Refactor**: Test embedding → reference-by-path throughout; accumulated prose condensed (-96 lines) |
-| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: "embeds it in the task doc" → "saves to disk, references by path" |
-| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: Dockerfile + test compose as scaffold; compose startup verification gate |
-| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes Dockerfile + test compose; model creates only production compose |
-| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: Dockerfile + test compose move to Scaffold; Phasing Guidelines updated |
-| 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Fix**: Long-literal formatting rule; trial references removed from skill content |
-| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Fix**: Trial references replaced with principle-based explanations |
+| 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: image family not exact tag |
+| 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: `:memory:` fixture/Behavior pairing rule |
+| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest/fixture-patterns.md` | **New**: Fixture pattern templates + interaction rules |
+| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: pointer to `fixture-patterns.md` |
+| 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `fixture-patterns.md` |
+| 2026-03-17 (Chat 6/T25+T26) | `references/stacks/infra.md` | **Fix**: pip freeze version pinning flow |
+| 2026-03-18 (Chat 7) | `task-template.md` | **Redesign**: test reference-by-path |
+| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: reference-by-path; prose tightened |
+| 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Refactor**: reference-by-path; long-literal rule; trial refs removed |
+| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: reference-by-path; Dockerfile + test compose scaffold |
+| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: Dockerfile + test compose scaffold; trial refs removed |
+| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: scaffold includes Dockerfile + test compose |
+| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest/fixture-patterns.md` | **Fix**: Pattern 3 template enforces `:memory:` only; `tmp_path` prohibited for SQLite fixtures |
+| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard, not pairing rule; stub example updated to `:memory:` |
 
 ---
 
@@ -186,7 +184,7 @@ coding-agent-ready-planning-skill/
     ├── T01-strategy-comparison.md
     ├── T02-tdd-approach.md
     ├── ...
-    └── T28-gemini-chat7-validation.md
+    └── T30-gemini-same-regression.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.
