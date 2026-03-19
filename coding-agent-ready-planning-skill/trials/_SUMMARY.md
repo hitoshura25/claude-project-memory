@@ -32,12 +32,13 @@
 | T26 | 2026-03-17 | Gemini 3.1 Flash Lite | 16/18 ✅, 1 ⚠️ | hadolint DL3013 + token limit; container exit(1) |
 | T27 | 2026-03-18 | Qwen 30B | 17/19 (14✅ 3⚠️ 1❌) | Chat 7: test-by-ref + Dockerfile scaffold validated; Docker exit(1) missing secret key |
 | T28 | 2026-03-18 | Gemini 3.1 Flash Lite | 17/19 (17✅ 1❌) | Chat 7: 17/17 service tasks clean; same Docker exit(1); 26 calls |
-| T29 | 2026-03-19 | Qwen 30B | 7✅ 1⚠️ 9 degraded 1❌ | **Regression**: missing persistent conn guidance → T23 pattern; 9-task cascade |
+| T29 | 2026-03-19 | Qwen 30B | 7✅ 1⚠️ 9 degraded 1❌ | **Regression**: missing persistent conn guidance → 9-task cascade |
+| T30 | 2026-03-19 | Gemini 3.1 Flash Lite | 2✅, hard-stop task 3 | **Same regression**: both models default to multi-connection SQLite without explicit guidance |
 
 ---
 
-## Model Standings (as of T29)
+## Model Standings (as of T30)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean (26 calls).
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️. T29: regression to 7✅ — Claude Code authoring non-determinism, not model regression.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean. T30: hard-stop at task 3 — Claude Code authoring gap, not model regression.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️. T29: 7✅ 9 degraded — same authoring gap as Gemini T30.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
