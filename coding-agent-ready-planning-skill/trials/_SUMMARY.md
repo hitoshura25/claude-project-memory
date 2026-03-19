@@ -32,11 +32,12 @@
 | T26 | 2026-03-17 | Gemini 3.1 Flash Lite | 16/18 ✅, 1 ⚠️ | hadolint DL3013 + token limit; container exit(1) |
 | T27 | 2026-03-18 | Qwen 30B | 17/19 (14✅ 3⚠️ 1❌) | Chat 7: test-by-ref + Dockerfile scaffold validated; Docker exit(1) missing secret key |
 | T28 | 2026-03-18 | Gemini 3.1 Flash Lite | 17/19 (17✅ 1❌) | Chat 7: 17/17 service tasks clean; same Docker exit(1); 26 calls |
+| T29 | 2026-03-19 | Qwen 30B | 7✅ 1⚠️ 9 degraded 1❌ | **Regression**: missing persistent conn guidance → T23 pattern; 9-task cascade |
 
 ---
 
-## Model Standings (as of T28)
+## Model Standings (as of T29)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean (26 calls), Docker exit(1) is task doc gap not model regression.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️ on service tasks, Docker exit(1) same as Gemini. E501 lint surface causes reflection exhaustion on extractors.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean (26 calls).
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️. T29: regression to 7✅ — Claude Code authoring non-determinism, not model regression.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
