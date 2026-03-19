@@ -84,6 +84,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **Dockerfile is scaffold, not a task deliverable**: Claude Code writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files. Every Docker task failure (T21, T22, T25, T26) was caused by the model recreating something Claude Code had already verified.
 - **Test compose is scaffold too**: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`. This catches missing env vars and config issues that caused T27/T28 container exit(1).
 - **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads — single-line forms trigger E501 lint spirals (T27 exhausted reflections on 3 extractor tasks).
+- **Skill content must not reference trial numbers or chat-specific history**. Trial references (T21, T27, etc.) are meaningless to Claude Code. Skill guidance should explain the *principle* and *why*, not cite historical incidents. Trial-specific details belong in the README and trial files, not in skill content.
 
 ---
 
@@ -162,17 +163,15 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: Inline fixture code → pattern summary + pointer to `python-pytest/fixture-patterns.md` |
 | 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `python-pytest/fixture-patterns.md`; Bundled Resources updated |
 | 2026-03-17 (Chat 6/T25+T26) | `references/stacks/infra.md` | **Fix**: Step 2 rewritten — pip freeze version pinning flow. Build unpinned → capture versions → pin → rebuild → hadolint |
-| 2026-03-18 (Chat 7) | `task-template.md` | **Redesign**: `## Tests` section references test file by path instead of embedding code. Eliminates copy-divergence bug class. |
+| 2026-03-18 (Chat 7) | `task-template.md` | **Redesign**: `## Tests` section references test file by path instead of embedding code |
 | 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 5 updated for reference-by-path; prose tightened (-15 lines) |
 | 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Refactor**: Test embedding → reference-by-path throughout; accumulated prose condensed (-96 lines) |
 | 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: "embeds it in the task doc" → "saves to disk, references by path" |
-| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: "Base Image Verification" → "Dockerfile as Scaffold". Dockerfile stays on disk; model only creates compose files. |
-| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes Dockerfile; Step 3b simplified for infra; manifest Dockerfile removed from `files_created` |
-| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment task Dockerfile moves from `Create:` to `Scaffold:`; Phasing Guidelines updated |
-| 2026-03-18 (Chat 7/T27+T28) | `references/stacks/infra.md` | **Redesign**: Test compose added to scaffold alongside Dockerfile. Compose startup verification gate (`docker compose up --wait`) added to Step 4. |
-| 2026-03-18 (Chat 7/T27+T28) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes test compose; model creates only production compose |
-| 2026-03-18 (Chat 7/T27+T28) | `implementation-planning/references/plan-format.md` | **Fix**: Test compose moves to Scaffold; Phasing Guidelines updated |
-| 2026-03-18 (Chat 7/T27+T28) | `references/writing-guide.md` | **Fix**: Long-literal formatting rule — multi-line form for SQL, Avro schemas, nested dicts in Behavior sections |
+| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: Dockerfile + test compose as scaffold; compose startup verification gate |
+| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes Dockerfile + test compose; model creates only production compose |
+| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: Dockerfile + test compose move to Scaffold; Phasing Guidelines updated |
+| 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Fix**: Long-literal formatting rule; trial references removed from skill content |
+| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Fix**: Trial references replaced with principle-based explanations |
 
 ---
 
