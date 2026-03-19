@@ -59,11 +59,11 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T26 / Chat 7)
+## Model Standings (as of T28 / Chat 7)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T22/T26 degraded on Docker (task doc authoring errors, not model regressions).
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T25 Docker task failed on fabricated pinned versions. Not a model regression — task doc should provide pinned versions.
-- **Codestral 22B**: Permanently disqualified (T8, T11, T16). Test file corruption and edit format failures are model-level behaviours not addressable through task doc improvements.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean (26 calls). Docker exit(1) is task doc gap not model regression.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️ service tasks. E501 on extractors (Avro schema + inline SQL). Docker exit(1) same as Gemini.
+- **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
 ---
 
@@ -82,6 +82,8 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild. Prevents both model version fabrication (T25) and hadolint DL3013 spirals (T26).
 - **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism — the same class of bug as T23/T24 but at the task-doc generation stage.
 - **Dockerfile is scaffold, not a task deliverable**: Claude Code writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files. Every Docker task failure (T21, T22, T25, T26) was caused by the model recreating something Claude Code had already verified.
+- **Test compose is scaffold too**: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`. This catches missing env vars and config issues that caused T27/T28 container exit(1).
+- **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads — single-line forms trigger E501 lint spirals (T27 exhausted reflections on 3 extractor tasks).
 
 ---
 
@@ -102,6 +104,8 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning: `stacks/infra.md` Step 2 rewritten with `pip freeze` capture flow. Prevents fabricated versions and hadolint DL3013.
 14. **RESOLVED (Chat 7)** — Test embedding divergence: task docs now reference test files by path instead of embedding copies. Eliminates T23/T24/T27 class of LLM non-determinism bugs where validated on-disk test and task doc copy diverge.
 15. **RESOLVED (Chat 7)** — Dockerfile as scaffold: Claude Code writes, builds, pins, and validates the Dockerfile during Step 3. It stays on disk — the small model only creates compose files. Eliminates T21/T22/T25/T26 class of Docker task failures.
+16. **RESOLVED (Chat 7/T27+T28)** — Test compose as scaffold: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait` during Step 3. Eliminates T27/T28 missing env var class (container exit(1)).
+17. **RESOLVED (Chat 7/T27+T28)** — Long-literal E501 surface: `writing-guide.md` now requires multi-line form for SQL queries, Avro schemas, and nested dicts in Behavior sections. Same principle as SQL constants and wiring snippets.
 
 ---
 
@@ -165,6 +169,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: "Base Image Verification" → "Dockerfile as Scaffold". Dockerfile stays on disk; model only creates compose files. |
 | 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes Dockerfile; Step 3b simplified for infra; manifest Dockerfile removed from `files_created` |
 | 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment task Dockerfile moves from `Create:` to `Scaffold:`; Phasing Guidelines updated |
+| 2026-03-18 (Chat 7/T27+T28) | `references/stacks/infra.md` | **Redesign**: Test compose added to scaffold alongside Dockerfile. Compose startup verification gate (`docker compose up --wait`) added to Step 4. |
+| 2026-03-18 (Chat 7/T27+T28) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 scaffold includes test compose; model creates only production compose |
+| 2026-03-18 (Chat 7/T27+T28) | `implementation-planning/references/plan-format.md` | **Fix**: Test compose moves to Scaffold; Phasing Guidelines updated |
+| 2026-03-18 (Chat 7/T27+T28) | `references/writing-guide.md` | **Fix**: Long-literal formatting rule — multi-line form for SQL, Avro schemas, nested dicts in Behavior sections |
 
 ---
 
@@ -179,7 +187,7 @@ coding-agent-ready-planning-skill/
     ├── T01-strategy-comparison.md
     ├── T02-tdd-approach.md
     ├── ...
-    └── T26-gemini-hadolint-token-limit.md
+    └── T28-gemini-chat7-validation.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.
