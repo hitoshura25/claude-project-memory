@@ -61,3 +61,5 @@
 | 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: scaffold includes Dockerfile + test compose |
 | 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest/fixture-patterns.md` | **Fix**: Pattern 3 enforces `:memory:` only; `tmp_path` prohibited |
 | 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard |
+| 2026-03-20 (Chat 8) | `references/writing-guide.md` | **Fix**: Explicit I/O data format rule — task docs must specify binary/JSON/etc. |
+| 2026-03-20 (Chat 8) | `references/writing-guide.md` | **Fix**: No cross-task references rule — prohibit "same as TaskX" in Behavior sections; inline all output structures + return type construction |
