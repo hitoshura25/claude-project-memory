@@ -63,4 +63,4 @@
 | 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard |
 | 2026-03-20 (Chat 8) | `references/writing-guide.md` | Added then reverted I/O data format + no cross-task reference rules — subsumed by code-grounding rule |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Code-grounding rule — Behavior sections derived from test files and scaffold code, not plan prose |
-| 2026-03-20 (Chat 8/T33+T34) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Broadened grounding rule — verify every referenced class/function/type against its actual source definition on disk |
+| 2026-03-20 (Chat 8/T33+T34) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Grounding rule refined — explicit that small model can't navigate codebase; Claude Code must read source definitions and inline verified details into task doc |
