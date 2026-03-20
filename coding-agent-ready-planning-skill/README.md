@@ -59,10 +59,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T30 / Chat 7)
+## Model Standings (as of T32 / Chat 7)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean. T30: hard-stop task 3 — Claude Code authoring gap, not model regression.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️. T29: 7✅ 9 degraded — same authoring gap as Gemini T30.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T32: 16✅, Docker full smoke test pass (HTTP 200), UUIDStore persistent conn correct. 2 task doc gaps.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T31: 8✅, Docker ✅ (first ever). `:memory:` caught multi-conn at task 2 (no cascade). 9 degraded from task doc gaps + reflection budget.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
 ---
@@ -84,6 +84,7 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 - **Test compose is scaffold too**: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`.
 - **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads.
 - **Skill content must not reference trial numbers or chat-specific history**. Trial references are meaningless to Claude Code. Skill guidance should explain the *principle* and *why*, not cite historical incidents.
+- **Always regenerate from a clean branch**: When regenerating scaffold and task docs after skill changes, use a branch with no prior committed scaffold. Claude Code's `superpowers:brainstorming` skill references git history — prior committed task docs contaminate fresh regenerations, causing non-determinism that looks like Claude Code compliance issues but is actually historical artifact copying.
 
 ---
 
@@ -106,7 +107,8 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 15. **RESOLVED (Chat 7)** — Dockerfile as scaffold.
 16. **RESOLVED (Chat 7/T27+T28)** — Test compose as scaffold.
 17. **RESOLVED (Chat 7/T27+T28)** — Long-literal E501 surface.
-18. **RESOLVED (Chat 7/T29+T30)** — `:memory:` enforced as quality standard. Fixture template uses `:memory:` only (no `tmp_path` option). `tmp_path` masks the multi-connection bug; `:memory:` catches it immediately. Eliminates the T23/T29/T30 class of failures.
+18. **RESOLVED (Chat 7/T29+T30)** — `:memory:` enforced as quality standard.
+19. **OPEN (T31+T32)** — Task doc content gaps in fresh regeneration: Google Drive Client (binary vs JSON, both models), Total Calories (output dict keys, both models), Avro duplicate named types (Qwen), ExtractionResult interface (Qwen), Settings field names (Qwen), DAG mock (Qwen). Need investigation in specific task docs and test files.
 
 ---
 
@@ -168,8 +170,8 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 | 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: reference-by-path; Dockerfile + test compose scaffold |
 | 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: Dockerfile + test compose scaffold; trial refs removed |
 | 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: scaffold includes Dockerfile + test compose |
-| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest/fixture-patterns.md` | **Fix**: Pattern 3 template enforces `:memory:` only; `tmp_path` prohibited for SQLite fixtures |
-| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard, not pairing rule; stub example updated to `:memory:` |
+| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest/fixture-patterns.md` | **Fix**: Pattern 3 enforces `:memory:` only; `tmp_path` prohibited |
+| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard |
 
 ---
 
@@ -184,7 +186,7 @@ coding-agent-ready-planning-skill/
     ├── T01-strategy-comparison.md
     ├── T02-tdd-approach.md
     ├── ...
-    └── T30-gemini-same-regression.md
+    └── T32-gemini-clean-branch-validation.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.

@@ -30,15 +30,17 @@
 | T24 | 2026-03-17 | Qwen 30B | 3/18 (1 ⚠️, 2 ✅) — stalled task 4 | Capture mock + body assertion contradiction |
 | T25 | 2026-03-17 | Qwen 30B | 16/18 ✅, 1 ⚠️ | Pinned version fabrication (`boto3==1.29.150`) |
 | T26 | 2026-03-17 | Gemini 3.1 Flash Lite | 16/18 ✅, 1 ⚠️ | hadolint DL3013 + token limit; container exit(1) |
-| T27 | 2026-03-18 | Qwen 30B | 17/19 (14✅ 3⚠️ 1❌) | Chat 7: test-by-ref + Dockerfile scaffold validated; Docker exit(1) missing secret key |
-| T28 | 2026-03-18 | Gemini 3.1 Flash Lite | 17/19 (17✅ 1❌) | Chat 7: 17/17 service tasks clean; same Docker exit(1); 26 calls |
-| T29 | 2026-03-19 | Qwen 30B | 7✅ 1⚠️ 9 degraded 1❌ | **Regression**: missing persistent conn guidance → 9-task cascade |
-| T30 | 2026-03-19 | Gemini 3.1 Flash Lite | 2✅, hard-stop task 3 | **Same regression**: both models default to multi-connection SQLite without explicit guidance |
+| T27 | 2026-03-18 | Qwen 30B | 17/19 (14✅ 3⚠️ 1❌) | Chat 7: test-by-ref + Dockerfile scaffold validated; Docker exit(1) |
+| T28 | 2026-03-18 | Gemini 3.1 Flash Lite | 17/19 (17✅ 1❌) | Chat 7: 17/17 service tasks clean; Docker exit(1); 26 calls |
+| T29 | 2026-03-19 | Qwen 30B | 7✅ 1⚠️ 9 degraded 1❌ | Regression: missing persistent conn guidance → 9-task cascade |
+| T30 | 2026-03-19 | Gemini 3.1 Flash Lite | 2✅, hard-stop task 3 | Same regression: both models default to multi-connection SQLite |
+| T31 | 2026-03-19 | Qwen 30B | 8✅ 9⚠️ 1❌ | Clean branch: `:memory:` caught UUIDStore; Docker ✅; no cascade; 9 task doc gaps |
+| T32 | 2026-03-19 | Gemini 3.1 Flash Lite | **16✅** 2⚠️ 1❌ | Clean branch: UUIDStore ✅; Docker smoke test ✅ (HTTP 200); DAG ✅; 2 task doc gaps |
 
 ---
 
-## Model Standings (as of T30)
+## Model Standings (as of T32)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T28: 17/17 service tasks clean. T30: hard-stop at task 3 — Claude Code authoring gap, not model regression.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T27: 14✅ 3⚠️. T29: 7✅ 9 degraded — same authoring gap as Gemini T30.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T32: 16✅, Docker smoke test full pass (HTTP 200), UUIDStore persistent conn correct. 2 task doc gaps (Google Drive Client, Total Calories).
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T31: 8✅, Docker ✅ (first ever). `:memory:` caught multi-conn at task 2 (no cascade). 9 degraded from task doc gaps + UUIDStore reflection budget.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
