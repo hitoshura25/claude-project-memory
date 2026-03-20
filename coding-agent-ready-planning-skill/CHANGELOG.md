@@ -64,3 +64,4 @@
 | 2026-03-20 (Chat 8) | `references/writing-guide.md` | Added then reverted I/O data format + no cross-task reference rules — subsumed by code-grounding rule |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Code-grounding rule — Behavior sections derived from test files and scaffold code, not plan prose |
 | 2026-03-20 (Chat 8/T33+T34) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Grounding rule refined — explicit that small model can't navigate codebase; Claude Code must read source definitions and inline verified details into task doc |
+| 2026-03-20 (Chat 8) | `scripts/docker-smoke-test-template.sh` | **Fix**: Capture `docker compose up --wait` exit code; dump container status + logs (80 lines) on failure before exiting. Enables diagnosis of Docker exit(1) |
