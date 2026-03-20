@@ -59,3 +59,4 @@
 | T32 | Gemini 3.1 FL | 16✅ 2⚠️ 1❌ | `task-doc-gap`, `docker-lifecycle` | GDrive, Calories, Docker | Clean branch; Docker full pass; 2 task doc gaps | Pending |
 | T33 | Qwen | 12✅ 5⚠️ | `grounding-validated`, `task-doc-gap`, `docker-lifecycle` | HRV, O2Sat, ExSession, RabbitMQ, TotalCal, Docker | Grounding fixed 5 gaps; ExtractionResult kwargs + uuid_filter remain | Yes (Step 5 grounding) |
 | T34 | Gemini 3.1 FL | 16✅ 1⚠️ | `grounding-validated`, `task-doc-gap`, `docker-lifecycle` | HRV, Docker | Grounding fixed both T32 gaps; ExtractionResult kwargs on HRV only | Yes (Step 5 grounding) |
+| T35 | Qwen | **18✅** 0⚠️ | `clean-sweep`, `grounding-validated` | — | Refined grounding rule; Docker HTTP 200; all Issue #19/#20 gaps resolved | Yes (refined grounding) |

@@ -38,11 +38,12 @@
 | T32 | 2026-03-19 | Gemini 3.1 Flash Lite | **16✅** 2⚠️ 1❌ | Clean branch: UUIDStore ✅; Docker smoke test ✅ (HTTP 200); DAG ✅; 2 task doc gaps |
 | T33 | 2026-03-20 | Qwen 30B | 12✅ 5⚠️ | Code-grounding rule: +4✅ vs T31; Avro/DAG/UUIDStore fixed; ExtractionResult kwargs + uuid_filter remain; Docker exit(1) |
 | T34 | 2026-03-20 | Gemini 3.1 Flash Lite | 16✅ 1⚠️ | Code-grounding rule: GDrive+TotalCal fixed; HRV ExtractionResult kwargs; Docker exit(1) |
+| T35 | 2026-03-20 | Qwen 30B | **18✅** 0⚠️ | **Third Qwen clean sweep** — refined grounding rule; Docker ✅ (HTTP 200); 44 calls |
 
 ---
 
-## Model Standings (as of T34 / Chat 8)
+## Model Standings (as of T35 / Chat 8)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T34: 16✅ (service tasks), 1⚠️ (HRV ExtractionResult kwargs). Both T32 gaps (Google Drive, Total Calories) fixed by grounding rule. Docker exit(1) regression.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18. T33: 12✅ (+4 vs T31). Avro dup type, DAG mock, UUIDStore all fixed. 5 degraded from ExtractionResult kwargs + uuid_filter + RabbitMQ field values. Docker exit(1).
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T34: 16✅, 1⚠️ (HRV). Awaiting T36 with refined grounding rule.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, **T35**. T35: 18✅, Docker HTTP 200, 44 calls. Third clean sweep validates refined grounding rule.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
