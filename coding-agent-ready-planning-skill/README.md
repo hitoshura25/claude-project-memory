@@ -1,11 +1,25 @@
 # Coding Agent Ready Planning Skill — Project Context
 
 > **Purpose**: Persistent memory across chat sessions for the `devtools:agent-ready-plans` and
-> `devtools:implementation-planning` skills. Read this file at the start of every new chat.
-> For detailed trial analysis, see `trials/T<NN>-*.md`. For the scoreboard, see `trials/_SUMMARY.md`.
+> `devtools:implementation-planning` skills.
 >
 > **Skill location**: `~/claude-devtools/skills/agent-ready-plans/`
 > **Test project**: `~/health-data-ai-platform` (airflow Google Drive ingestion service)
+
+---
+
+## Conversation-Start Protocol
+
+Read these files in order:
+1. **This file** — orientation, standings, open issues
+2. **`LEARNINGS.md`** — distilled principles (always relevant)
+3. **`trials/_SUMMARY.md`** — scoreboard
+
+Load on-demand only when needed:
+- `CHANGELOG.md` — skill changes log (check if a specific fix already landed)
+- `RESOLVED_ISSUES.md` — historical closed issues (reference only)
+- `trials/_INDEX.md` — structured tags per trial (find trials by failure pattern)
+- `trials/T<NN>-*.md` — individual trial detail (read when analyzing a specific trial)
 
 ---
 
@@ -33,10 +47,10 @@ claude-devtools/
         stacks/
           python-pytest.md
           python-pytest/
-            fixture-patterns.md  <- Fixture templates by behavioral pattern
+            fixture-patterns.md
           typescript-jest.md
           kotlin-junit.md
-          infra.md             <- Docker/compose/Terraform/k8s tooling
+          infra.md
       scripts/
         lint-ruff-wrapper.sh
         infra-lint-wrapper-template.sh
@@ -67,111 +81,12 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Key Learnings & Principles
-
-- **Fixes must be generic and upstream** in the skill files, never band-aids on individual task docs.
-- **Context length floor**: Do not reduce LM Studio context below 32k. MLX pre-allocates a fixed GPU KV cache; reducing to 12k causes Metal GPU OOM segfaults mid-run (T04).
-- **`:memory:` is the quality standard for SQLite fixtures**: Faster than file-backed, perfect isolation, and enforces correct implementation (persistent `self._conn`). `tmp_path` masks the multi-connection bug — do not use it for SQLite fixtures. See `python-pytest.md` § Trap 1 and `fixture-patterns.md` Pattern 3.
-- **Layer 0 lint gate**: Linter must return zero errors against pre-written test files before they can be embedded in task docs.
-- **Import integrity pattern**: Wiring task docs must enumerate exact class names with explicit instruction not to import anything not listed.
-- **Cascade isolation**: Component tasks create files only; wiring is always a separate task. Component test_commands never include shared files.
-- **SQL Constants Pattern**: All SQL strings must be assigned to named module-level constants, never inlined in method bodies (eliminates E501 surface).
-- **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
-- **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
-- **Pip version pinning in Dockerfiles**: Claude Code must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild.
-- **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism.
-- **Dockerfile is scaffold, not a task deliverable**: Claude Code writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files.
-- **Test compose is scaffold too**: Claude Code writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`.
-- **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads.
-- **Skill content must not reference trial numbers or chat-specific history**. Trial references are meaningless to Claude Code. Skill guidance should explain the *principle* and *why*, not cite historical incidents.
-- **Always regenerate from a clean branch**: When regenerating scaffold and task docs after skill changes, use a branch with no prior committed scaffold. Claude Code's `superpowers:brainstorming` skill references git history — prior committed task docs contaminate fresh regenerations, causing non-determinism that looks like Claude Code compliance issues but is actually historical artifact copying.
-
----
-
 ## Open Issues
 
-1. **RESOLVED** — Wire DAG callable body snippets (T15, T17, T18)
-2. **RESOLVED** — UUIDStore SQL E501 (Chat 5: SQL Constants Pattern)
 3. **ACTIONABLE** — Runner: pre-task file backup + restore on critical export loss
-4. **RESOLVED** — Integration test deferral → service-gated (Chat 5)
-5. **Codestral** — permanently disqualified
-6. **Context length floor** — 32k (Qwen/MLX)
-7. **RESOLVED** — RabbitMQ `is_closed` mock trap (Chat 5)
-8. **RESOLVED** — Docker task test_command / runner redesign (Chat 5)
-9. **RESOLVED (Chat 6)** — Base image tag verification.
-10. **RESOLVED (Chat 6)** — Dockerfile Layer 0 validation gate.
-11. **RESOLVED (Chat 6/T23)** — `:memory:` fixture/Behavior pairing rule.
-12. **RESOLVED (Chat 6/T24)** — Fixture interaction rules.
-13. **RESOLVED (Chat 6/T25+T26)** — Pip version pinning.
-14. **RESOLVED (Chat 7)** — Test embedding divergence.
-15. **RESOLVED (Chat 7)** — Dockerfile as scaffold.
-16. **RESOLVED (Chat 7/T27+T28)** — Test compose as scaffold.
-17. **RESOLVED (Chat 7/T27+T28)** — Long-literal E501 surface.
-18. **RESOLVED (Chat 7/T29+T30)** — `:memory:` enforced as quality standard.
 19. **OPEN (T31+T32)** — Task doc content gaps in fresh regeneration: Google Drive Client (binary vs JSON, both models), Total Calories (output dict keys, both models), Avro duplicate named types (Qwen), ExtractionResult interface (Qwen), Settings field names (Qwen), DAG mock (Qwen). Need investigation in specific task docs and test files.
 
----
-
-## Skill Changes Log
-
-| Date | File | Change |
-|------|------|--------|
-| 2026-03-03 | `run-tasks-template.sh` | Added `--timeout 600` to aider invocation |
-| 2026-03-03 | `references/writing-guide.md` | Added ABC call site rule |
-| 2026-03-04 | `SKILL.md` | Added Step 0: prohibit `git checkout HEAD` restoration |
-| 2026-03-04 | `SKILL.md` Step 7 | Always copy runner from template, not git |
-| 2026-03-04 | `run-tasks-template.sh` | Reverted `timeout` shell wrapper; kept `--timeout` flag |
-| 2026-03-08 | `references/plan-format.md` | ABC contract fit verification; extract()-level override pattern |
-| 2026-03-08 | `references/tooling.md` | Positional argument trap fixture criterion; mock_fastavro_writer |
-| 2026-03-08 | `run-tasks-template.sh` | Corrected `--timeout` comment |
-| 2026-03-09 | `references/tooling.md` | Dotted mock path registration rule; persistence class stub rule |
-| 2026-03-10 | `references/tooling.md` | Refactor: language-neutral; stacks/ table |
-| 2026-03-10 | `references/writing-guide.md` | Refactor: language-neutral stub patterns |
-| 2026-03-10 | `implementation-planning/references/plan-format.md` | Refactor: language-neutral interface examples |
-| 2026-03-10 | `SKILL.md` | Refactor: Steps 2/3/3b generalized; stacks/ in Bundled Resources |
-| 2026-03-10 | `references/stacks/python-pytest.md` | New: all Python-specific content |
-| 2026-03-10 | `references/stacks/typescript-jest.md` | New: TypeScript/Jest stub |
-| 2026-03-10 | `references/stacks/kotlin-junit.md` | New: Kotlin/JUnit/Gradle stub |
-| 2026-03-10 | `implementation-planning/references/plan-format.md` | **Fix**: component tasks never modify shared files; wiring always deferred; phasing guidelines rewritten |
-| 2026-03-10 | `references/writing-guide.md` | **Fix**: component/wiring structural separation; Deferred Tasks updated |
-| 2026-03-11 | `SKILL.md` | **Fix**: removed stale wiring/test-scope bullets from Step 5; updated manifest example |
-| 2026-03-11 | `task-template.md` | **Fix**: removed Files to Modify and Wiring sections; added explanation |
-| 2026-03-12 | `implementation-planning/references/plan-format.md` | **Fix**: prohibit module-level instantiation of environment-dependent objects |
-| 2026-03-12 | `references/writing-guide.md` | **Fix**: Three-Layer Validation Gate; Layer 0 lint gate |
-| 2026-03-12 | `references/stacks/python-pytest.md` | **Fix**: SQLite Trap Patterns |
-| 2026-03-12 (Chat 4) | `implementation-planning/references/plan-format.md` | **Fix**: wiring tasks no longer deferred; `import_integrity` mandatory |
-| 2026-03-12 (Chat 4) | `references/writing-guide.md` | **Fix**: Wiring Task Tests section; import integrity check |
-| 2026-03-13 (pass 1–3) | `references/writing-guide.md` | **Fix**: Unconditional code snippets for wiring callable bodies |
-| 2026-03-14 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: SQL Constants Pattern; Ruff config; E501 suppression prohibition |
-| 2026-03-14 (Chat 5) | `references/writing-guide.md` | **Fix**: Deferred vs Service-Gated Tasks section |
-| 2026-03-14 (Chat 5) | `run-tasks-template.sh` | **Fix**: `requires_services` + `service_check_commands` support |
-| 2026-03-14 (Chat 5) | `SKILL.md` Step 5 | **Fix**: deferred vs service-gated distinction |
-| 2026-03-14 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: integration tests service-gated throughout |
-| 2026-03-15 (Chat 5) | `references/stacks/python-pytest.md` | **Fix**: pika `is_closed` mock trap |
-| 2026-03-15 (Chat 5) | `references/stacks/infra.md` | **New**: Infrastructure stack file |
-| 2026-03-15 (Chat 5) | `scripts/docker-smoke-test-template.sh` | **New**: Parameterised Docker smoke test template |
-| 2026-03-15 (Chat 5) | `scripts/infra-lint-wrapper-template.sh` | **New**: Infrastructure lint wrapper |
-| 2026-03-15 (Chat 5) | `references/tooling.md` | **Fix**: Mixed-Technology Projects section |
-| 2026-03-15 (Chat 5) | `run-tasks-template.sh` | **Redesign**: Per-task `lint_cmd` override; `requires_services` hard-fail |
-| 2026-03-15 (Chat 5) | `SKILL.md` (agent-ready-plans) | **Update**: infra task detection, setup, smoke test validation |
-| 2026-03-15 (Chat 5) | `implementation-planning/references/plan-format.md` | **Fix**: Phase N+1 Deployment; hard-fail language |
-| 2026-03-15 (Chat 5) | `implementation-planning/SKILL.md` | **Fix**: service-gated not deferred; deployment tasks |
-| 2026-03-16 (Chat 6) | `references/stacks/infra.md` | **Fix**: Base Image Verification + `docker build` gate |
-| 2026-03-16 (Chat 6) | `SKILL.md` (agent-ready-plans) | **Fix**: Step 3 + Step 3b — Dockerfile build verification |
-| 2026-03-16 (Chat 6) | `implementation-planning/references/plan-format.md` | **Fix**: image family not exact tag |
-| 2026-03-16 (Chat 6/T23) | `references/stacks/python-pytest.md` | **Fix**: `:memory:` fixture/Behavior pairing rule |
-| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest/fixture-patterns.md` | **New**: Fixture pattern templates + interaction rules |
-| 2026-03-17 (Chat 6/T24) | `references/stacks/python-pytest.md` | **Refactor**: pointer to `fixture-patterns.md` |
-| 2026-03-17 (Chat 6/T24) | `SKILL.md` (agent-ready-plans) | **Update**: Step 3 + 3b reference `fixture-patterns.md` |
-| 2026-03-17 (Chat 6/T25+T26) | `references/stacks/infra.md` | **Fix**: pip freeze version pinning flow |
-| 2026-03-18 (Chat 7) | `task-template.md` | **Redesign**: test reference-by-path |
-| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: reference-by-path; prose tightened |
-| 2026-03-18 (Chat 7) | `references/writing-guide.md` | **Refactor**: reference-by-path; long-literal rule; trial refs removed |
-| 2026-03-18 (Chat 7) | `implementation-planning/references/plan-format.md` | **Fix**: reference-by-path; Dockerfile + test compose scaffold |
-| 2026-03-18 (Chat 7) | `references/stacks/infra.md` | **Redesign**: Dockerfile + test compose scaffold; trial refs removed |
-| 2026-03-18 (Chat 7) | `SKILL.md` (agent-ready-plans) | **Update**: scaffold includes Dockerfile + test compose |
-| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest/fixture-patterns.md` | **Fix**: Pattern 3 enforces `:memory:` only; `tmp_path` prohibited |
-| 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard |
+> Full historical issue list (including resolved): see `RESOLVED_ISSUES.md`
 
 ---
 
@@ -179,14 +94,17 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ```
 coding-agent-ready-planning-skill/
-├── README.md              ← This file (read at conversation start)
-├── SKILL_CHANGES.md       ← Detailed explanation of the 2026-03-11 SKILL.md/task-template.md fix
+├── README.md              ← This file (orientation, loaded at conversation start)
+├── LEARNINGS.md           ← Distilled principles (loaded at conversation start)
+├── CHANGELOG.md           ← Skill changes log (loaded on-demand)
+├── RESOLVED_ISSUES.md     ← Historical resolved issues (loaded on-demand)
+├── SKILL_CHANGES.md       ← Detailed explanation of the 2026-03-11 fix
 └── trials/
     ├── _SUMMARY.md        ← Scoreboard table + model standings
+    ├── _INDEX.md           ← Structured tags per trial (find by pattern)
     ├── T01-strategy-comparison.md
-    ├── T02-tdd-approach.md
     ├── ...
     └── T32-gemini-clean-branch-validation.md
 ```
 
-Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md`.
+Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md` + a row in `_INDEX.md`.
