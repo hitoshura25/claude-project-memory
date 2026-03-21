@@ -71,3 +71,5 @@
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 6 | **Update**: Manifest example includes `service_compose` field |
 | 2026-03-21 (Chat 9) | `references/stacks/python-pytest.md` | **Fix**: sys.modules Mock Constructor Trap — MagicMock constructors discard kwargs; explicit attribute assignments required in task docs |
 | 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Fix**: sys.modules mock attribute checkpoint in Wiring Task Tests section |
+| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Refactor**: Remove Python-specific snippets (ruff, uv run pytest, import_integrity code); replace with language-neutral principles + `stacks/<language>.md` pointers |
+| 2026-03-21 (Chat 9) | `references/stacks/python-pytest.md` | **New**: Wiring Task Patterns section with Python-specific import_integrity test example |
