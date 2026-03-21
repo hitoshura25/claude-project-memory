@@ -20,6 +20,7 @@
 - `test-authoring` — Claude Code test quality (embedding divergence, missing guidance)
 - `clean-sweep` — All tasks passed
 - `grounding-validated` — Code-grounding rule validated (task docs derived from code)
+- `integration-validated` — Integration tests passed against live services
 
 ## Index
 
@@ -60,3 +61,4 @@
 | T33 | Qwen | 12✅ 5⚠️ | `grounding-validated`, `task-doc-gap`, `docker-lifecycle` | HRV, O2Sat, ExSession, RabbitMQ, TotalCal, Docker | Grounding fixed 5 gaps; ExtractionResult kwargs + uuid_filter remain | Yes (Step 5 grounding) |
 | T34 | Gemini 3.1 FL | 16✅ 1⚠️ | `grounding-validated`, `task-doc-gap`, `docker-lifecycle` | HRV, Docker | Grounding fixed both T32 gaps; ExtractionResult kwargs on HRV only | Yes (Step 5 grounding) |
 | T35 | Qwen | **18✅** 0⚠️ | `clean-sweep`, `grounding-validated` | — | Refined grounding rule; Docker HTTP 200; all Issue #19/#20 gaps resolved | Yes (refined grounding) |
+| T36 | Qwen | 18✅ 1⚠️ | `grounding-validated`, `integration-validated`, `task-doc-gap` | DAG Assembly | Three-compose validated; Integration 3/3 ✅; DAG mock intermittent | Yes (three-compose + service_compose) |

@@ -73,10 +73,10 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T35 / Chat 8)
+## Model Standings (as of T36 / Chat 8)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, **T35**. T35: 18✅, Docker HTTP 200, 44 calls. Refined grounding rule resolved all Issue #19/#20 gaps.
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T34: 16✅, 1⚠️ (HRV ExtractionResult kwargs). Awaiting T36 with refined grounding rule.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T36: 18✅ + integration 3/3 ✅ (first ever); DAG mock intermittent (1⚠️). Three-compose and service_compose validated.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T34: 16✅, 1⚠️. Awaiting trial with three-compose + refined grounding.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
 ---
@@ -84,9 +84,9 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 ## Open Issues
 
 3. **ACTIONABLE** — Runner: pre-task file backup + restore on critical export loss
-21. **MONITORING** — Docker exit(1) observed in T33+T34 but resolved in T35 by regeneration. May be non-deterministic scaffold issue. Smoke test template now captures container logs on failure.
+22. **INTERMITTENT (T36)** — DAG Assembly Airflow mock: `dag.dag_id` returns MagicMock when Qwen uses `with DAG(...) as dag:` instead of explicit attribute assignment. Task doc includes the workaround but model doesn't always follow it. Passed in T35, failed in T36.
 
-> Issues #19 and #20 resolved by code-grounding rule (validated in T35 Qwen clean sweep). Pending Gemini confirmation in T36.
+> Issues #19, #20, #21 resolved. Issue #19+#20 by code-grounding rule. Issue #21 (Docker exit(1)) resolved by three-compose pattern regeneration.
 
 > Full historical issue list (including resolved): see `RESOLVED_ISSUES.md`
 
@@ -106,7 +106,7 @@ coding-agent-ready-planning-skill/
     ├── _INDEX.md           ← Structured tags per trial (find by pattern)
     ├── T01-strategy-comparison.md
     ├── ...
-    └── T35-qwen-clean-sweep-grounding.md
+    └── T36-qwen-three-compose-integration.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md` + a row in `_INDEX.md`.

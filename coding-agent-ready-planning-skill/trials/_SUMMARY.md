@@ -39,11 +39,12 @@
 | T33 | 2026-03-20 | Qwen 30B | 12✅ 5⚠️ | Code-grounding rule: +4✅ vs T31; Avro/DAG/UUIDStore fixed; ExtractionResult kwargs + uuid_filter remain; Docker exit(1) |
 | T34 | 2026-03-20 | Gemini 3.1 Flash Lite | 16✅ 1⚠️ | Code-grounding rule: GDrive+TotalCal fixed; HRV ExtractionResult kwargs; Docker exit(1) |
 | T35 | 2026-03-20 | Qwen 30B | **18✅** 0⚠️ | **Third Qwen clean sweep** — refined grounding rule; Docker ✅ (HTTP 200); 44 calls |
+| T36 | 2026-03-20 | Qwen 30B | 18✅ 1⚠️ | Three-compose + service_compose; **Integration ✅ 3/3**; DAG mock intermittent; 39 calls |
 
 ---
 
-## Model Standings (as of T35 / Chat 8)
+## Model Standings (as of T36 / Chat 8)
 
-- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T34: 16✅, 1⚠️ (HRV). Awaiting T36 with refined grounding rule.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, **T35**. T35: 18✅, Docker HTTP 200, 44 calls. Third clean sweep validates refined grounding rule.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T36: 18✅ + integration 3/3; DAG mock intermittent (1⚠️). Three-compose and service_compose validated.
+- **Gemini 3.1 Flash Lite**: Reference model. Clean sweeps on T12, T17, T20. T34: 16✅, 1⚠️. Awaiting trial with three-compose + refined grounding.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
