@@ -63,14 +63,17 @@
 | 2026-03-19 (Chat 7/T29+T30) | `references/stacks/python-pytest.md` | **Fix**: Trap 1 reframed — `:memory:` is quality standard |
 | 2026-03-20 (Chat 8) | `references/writing-guide.md` | Added then reverted I/O data format + no cross-task reference rules — subsumed by code-grounding rule |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Code-grounding rule — Behavior sections derived from test files and scaffold code, not plan prose |
-| 2026-03-20 (Chat 8/T33+T34) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Grounding rule refined — explicit that small model can't navigate codebase; Claude Code must read source definitions and inline verified details into task doc |
+| 2026-03-20 (Chat 8/T33+T34) | `SKILL.md` (agent-ready-plans) Step 5 | **Fix**: Grounding rule refined — explicit that small model can't navigate codebase; the planning model must read source definitions and inline verified details into task doc |
 | 2026-03-20 (Chat 8) | `scripts/docker-smoke-test-template.sh` | **Fix**: Capture `docker compose up --wait` exit code; dump container status + logs (80 lines) on failure before exiting |
 | 2026-03-20 (Chat 8) | `references/stacks/infra.md` | **Redesign**: Three-Compose Pattern — services compose (deps only), full test compose (includes services + app), production compose. Replaces Two-Compose Pattern |
 | 2026-03-20 (Chat 8) | `scripts/run-tasks-template.sh` | **Fix**: `service_compose` support — runner auto-starts services compose when `requires_services` unavailable, tears down after task |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 3 | **Update**: Three-compose scaffold; `service_compose` in manifest for integration tests |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 6 | **Update**: Manifest example includes `service_compose` field |
 | 2026-03-21 (Chat 9) | `references/stacks/python-pytest.md` | **Fix**: sys.modules Mock Constructor Trap — MagicMock constructors discard kwargs; explicit attribute assignments required in task docs |
-| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Fix**: sys.modules mock attribute checkpoint in Wiring Task Tests section |
-| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Refactor**: Remove Python-specific snippets (ruff, uv run pytest, import_integrity code); replace with language-neutral principles + `stacks/<language>.md` pointers |
+| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Fix**: Mock constructor attribute checkpoint in Wiring Task Tests section |
+| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Refactor**: Remove Python-specific snippets; replace with language-neutral principles + `stacks/<language>.md` pointers |
 | 2026-03-21 (Chat 9) | `references/stacks/python-pytest.md` | **New**: Wiring Task Patterns section with Python-specific import_integrity test example |
-| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Refactor**: Replace remaining Python-specific examples (XCom/Airflow callable body, avro_schema dict) with generic illustrations; remove `python` language tags from code fences |
+| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Refactor**: Replace remaining Python examples (XCom callable, avro_schema dict) with generic illustrations |
+| 2026-03-21 (Chat 9/T40) | `references/writing-guide.md` | **Fix**: Schema validation rule — task docs must include exact validated schemas when tests check schema parsing |
+| 2026-03-21 (Chat 9/T40) | `references/stacks/python-pytest.md` | **Fix**: Avro Named Type Redefinition Trap — fastavro rejects duplicate named record types |
+| 2026-03-21 (Chat 9/T40) | `references/writing-guide.md` | **Refactor**: Replace "Claude Code" with "the planning model" for agent-neutrality |
