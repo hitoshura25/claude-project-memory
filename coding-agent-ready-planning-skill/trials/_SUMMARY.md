@@ -43,11 +43,13 @@
 | T37 | 2026-03-20 | Gemini 3.1 Flash Lite | 18✅ 1⚠️ | Three-compose + service_compose; **Integration ✅ 3/3**; TotalCal ExtractionResult kwargs intermittent; 37 calls |
 | T38 | 2026-03-21 | Qwen 30B | 13✅ 2⚠️ OOM | **Regression**: repo map (`--subtree-only`) → Metal GPU OOM on DAG task + 2 uuid_filter failures |
 | T39 | 2026-03-21 | Qwen 30B | 17✅ 1⚠️ | Reverted to `--no-git`; matches T36 baseline; Integration 3/3 ✅ (clock skew on verify) |
+| T40 | 2026-03-21 | Qwen 30B | 8✅ 1⚠️ 1❌ halted | Post sys.modules fix; halted task 11 (Metal GPU OOM); Steps Avro schema trap (pre-existing) |
+| T41 | 2026-03-21 | Gemini 3.1 Flash Lite | **17✅** Docker ❌ | **sys.modules fix VALIDATED**; DAG 6/6 ✅; Avro self-corrected; Docker exit(1); quota exhausted |
 
 ---
 
-## Model Standings (as of T39 / Chat 8)
+## Model Standings (as of T41 / Chat 9)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. Baseline: 17–18✅ + integration 3/3 with `--no-git`. Repo map (T38) causes regression — do not use.
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. 37 calls.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. Baseline: 17–18✅ + integration 3/3 with `--no-git`. Repo map (T38) causes regression — do not use. T40 halted early (Metal GPU OOM).
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks clean, Docker exit(1). 40 calls. Stronger self-correction on Avro schemas than Qwen.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
