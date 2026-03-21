@@ -21,6 +21,7 @@
 - `clean-sweep` — All tasks passed
 - `grounding-validated` — Code-grounding rule validated (task docs derived from code)
 - `integration-validated` — Integration tests passed against live services
+- `repo-map-regression` — Enabling Aider repo map caused degradation
 
 ## Index
 
@@ -63,3 +64,5 @@
 | T35 | Qwen | **18✅** 0⚠️ | `clean-sweep`, `grounding-validated` | — | Refined grounding rule; Docker HTTP 200; all Issue #19/#20 gaps resolved | Yes (refined grounding) |
 | T36 | Qwen | 18✅ 1⚠️ | `grounding-validated`, `integration-validated`, `task-doc-gap` | DAG Assembly | Three-compose validated; Integration 3/3 ✅; DAG mock intermittent | Yes (three-compose + service_compose) |
 | T37 | Gemini 3.1 FL | 18✅ 1⚠️ | `grounding-validated`, `integration-validated`, `task-doc-gap` | Total Calories | Three-compose validated; Integration 3/3 ✅; ExtractionResult kwargs intermittent | Yes (three-compose + service_compose) |
+| T38 | Qwen | 13✅ 2⚠️ OOM | `repo-map-regression`, `context-exhaustion`, `task-doc-gap` | Steps, ExSession, DAG | Repo map (1024 tokens) → GPU OOM on DAG + uuid_filter regressions | No (reverted) |
+| T39 | Qwen | 17✅ 1⚠️ | `integration-validated`, `task-doc-gap` | DAG Assembly | Reverted `--no-git`; matches T36 baseline; Integration 3/3 (clock skew on verify) | No (confirmation) |

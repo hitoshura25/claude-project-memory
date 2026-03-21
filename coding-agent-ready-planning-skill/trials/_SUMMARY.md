@@ -41,11 +41,13 @@
 | T35 | 2026-03-20 | Qwen 30B | **18✅** 0⚠️ | **Third Qwen clean sweep** — refined grounding rule; Docker ✅ (HTTP 200); 44 calls |
 | T36 | 2026-03-20 | Qwen 30B | 18✅ 1⚠️ | Three-compose + service_compose; **Integration ✅ 3/3**; DAG mock intermittent; 39 calls |
 | T37 | 2026-03-20 | Gemini 3.1 Flash Lite | 18✅ 1⚠️ | Three-compose + service_compose; **Integration ✅ 3/3**; TotalCal ExtractionResult kwargs intermittent; 37 calls |
+| T38 | 2026-03-21 | Qwen 30B | 13✅ 2⚠️ OOM | **Regression**: repo map (`--subtree-only`) → Metal GPU OOM on DAG task + 2 uuid_filter failures |
+| T39 | 2026-03-21 | Qwen 30B | 17✅ 1⚠️ | Reverted to `--no-git`; matches T36 baseline; Integration 3/3 ✅ (clock skew on verify) |
 
 ---
 
-## Model Standings (as of T37 / Chat 8)
+## Model Standings (as of T39 / Chat 8)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T36: 18✅ + integration 3/3 ✅; DAG mock intermittent (1⚠️). 39 calls.
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅; TotalCal ExtractionResult kwargs intermittent (1⚠️). 37 calls.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. Baseline: 17–18✅ + integration 3/3 with `--no-git`. Repo map (T38) causes regression — do not use.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. 37 calls.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.

@@ -73,22 +73,23 @@ per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Comp
 
 ---
 
-## Model Standings (as of T37 / Chat 8)
+## Model Standings (as of T39 / Chat 8)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T36: 18✅ + integration 3/3; DAG mock intermittent. 39 calls.
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3; TotalCal kwargs intermittent. 37 calls.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. Baseline: 17–18✅ + integration 3/3 with `--no-git`. Repo map causes regression (T38) — do not use.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. 37 calls.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
-Both models now validated on the full pipeline: 19 tasks including Docker smoke test and live integration tests.
+Both models validated on the full 19-task pipeline including Docker smoke test and live integration tests.
 
 ---
 
 ## Open Issues
 
 3. **ACTIONABLE** — Runner: pre-task file backup + restore on critical export loss
-22. **INTERMITTENT** — Both models occasionally pass extra kwargs to project-defined dataclasses (ExtractionResult). Hits different tasks on different runs. Not systematic — grounding rule addresses it but doesn't eliminate non-deterministic model behavior. Qwen also intermittently fails DAG Assembly Airflow mock.
+22. **INTERMITTENT** — Both models occasionally pass extra kwargs to project-defined dataclasses or fail uuid_filter. Hits different tasks on different runs. Not systematic — grounding rule addresses it but doesn't eliminate non-deterministic model behavior. Qwen also intermittently fails DAG Assembly Airflow mock.
+23. **CLOSED (T38)** — Aider repo map (`--subtree-only`, `--no-auto-commits`) causes regression on Qwen 30B at 32k context. Metal GPU OOM on complex tasks + uuid_filter failures on simple tasks. Reverted to `--no-git`. Future path: per-task `--read` for targeted context.
 
-> Issues #19, #20, #21 resolved. Full history in `RESOLVED_ISSUES.md`.
+> Full historical issue list (including resolved): see `RESOLVED_ISSUES.md`
 
 ---
 
@@ -106,7 +107,7 @@ coding-agent-ready-planning-skill/
     ├── _INDEX.md           ← Structured tags per trial (find by pattern)
     ├── T01-strategy-comparison.md
     ├── ...
-    └── T37-gemini-three-compose-integration.md
+    └── T39-qwen-reverted-confirmation.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md` + a row in `_INDEX.md`.
