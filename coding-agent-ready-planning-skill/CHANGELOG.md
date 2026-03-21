@@ -77,3 +77,5 @@
 | 2026-03-21 (Chat 9/T40) | `references/writing-guide.md` | **Fix**: Schema validation rule — task docs must include exact validated schemas when tests check schema parsing |
 | 2026-03-21 (Chat 9/T40) | `references/stacks/python-pytest.md` | **Fix**: Avro Named Type Redefinition Trap — fastavro rejects duplicate named record types |
 | 2026-03-21 (Chat 9/T40) | `references/writing-guide.md` | **Refactor**: Replace "Claude Code" with "the planning model" for agent-neutrality |
+| 2026-03-21 (Chat 9/T41) | `references/stacks/infra.md` | **Fix**: Step 0 — Research the base image's Docker setup before writing any Dockerfile |
+| 2026-03-21 (Chat 9/T41) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment section references Step 0 research requirement |

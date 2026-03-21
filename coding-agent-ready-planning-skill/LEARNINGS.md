@@ -1,6 +1,6 @@
 # Key Learnings & Principles
 
-> Distilled from 40 trials across 9 chat sessions. These are the rules that govern
+> Distilled from 41 trials across 9 chat sessions. These are the rules that govern
 > skill development. Always loaded at conversation start alongside `README.md`.
 
 ---
@@ -45,6 +45,7 @@
 
 ## Docker & Infrastructure
 
+- **Docker scaffold requires technology-specific research, not templates**: Before writing any Dockerfile, the planning model must research the base image's official Docker documentation — entrypoint behavior, built-in initialization mechanisms, environment variables, and volume/permission requirements. Templates cannot substitute for this because every framework has unique entrypoint behavior. See `stacks/infra.md` § "Step 0: Research the base image's Docker setup".
 - **Pip version pinning in Dockerfiles**: The planning model must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild.
 - **Dockerfile is scaffold, not a task deliverable**: The planning model writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files.
 - **Test compose is scaffold too**: The planning model writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`.
