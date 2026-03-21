@@ -62,3 +62,4 @@
 | T34 | Gemini 3.1 FL | 16✅ 1⚠️ | `grounding-validated`, `task-doc-gap`, `docker-lifecycle` | HRV, Docker | Grounding fixed both T32 gaps; ExtractionResult kwargs on HRV only | Yes (Step 5 grounding) |
 | T35 | Qwen | **18✅** 0⚠️ | `clean-sweep`, `grounding-validated` | — | Refined grounding rule; Docker HTTP 200; all Issue #19/#20 gaps resolved | Yes (refined grounding) |
 | T36 | Qwen | 18✅ 1⚠️ | `grounding-validated`, `integration-validated`, `task-doc-gap` | DAG Assembly | Three-compose validated; Integration 3/3 ✅; DAG mock intermittent | Yes (three-compose + service_compose) |
+| T37 | Gemini 3.1 FL | 18✅ 1⚠️ | `grounding-validated`, `integration-validated`, `task-doc-gap` | Total Calories | Three-compose validated; Integration 3/3 ✅; ExtractionResult kwargs intermittent | Yes (three-compose + service_compose) |
