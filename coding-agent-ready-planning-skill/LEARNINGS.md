@@ -1,6 +1,6 @@
 # Key Learnings & Principles
 
-> Distilled from 32 trials across 7 chat sessions. These are the rules that govern
+> Distilled from 39 trials across 8 chat sessions. These are the rules that govern
 > skill development. Always loaded at conversation start alongside `README.md`.
 
 ---
@@ -34,6 +34,10 @@
 ## Fixture Patterns
 
 - **Fixture interaction rules**: Capture mocks block downstream side effects. Never combine a capture mock with an assertion on the captured function's output. See `python-pytest/fixture-patterns.md`.
+
+## Mock Traps
+
+- **sys.modules mock constructor trap**: When a framework class is loaded from a `sys.modules` MagicMock entry, constructor kwargs are silently discarded. `FrameworkClass(name="x")` returns a MagicMock whose `.name` is another MagicMock, not `"x"`. Task docs must include explicit attribute assignments after the constructor for every attribute that tests assert on. See `python-pytest.md` § "sys.modules Mock Constructor Trap".
 
 ## Docker & Infrastructure
 

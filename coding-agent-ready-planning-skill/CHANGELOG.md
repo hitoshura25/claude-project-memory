@@ -69,3 +69,5 @@
 | 2026-03-20 (Chat 8) | `scripts/run-tasks-template.sh` | **Fix**: `service_compose` support — runner auto-starts services compose when `requires_services` unavailable, tears down after task |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 3 | **Update**: Three-compose scaffold; `service_compose` in manifest for integration tests |
 | 2026-03-20 (Chat 8) | `SKILL.md` (agent-ready-plans) Step 6 | **Update**: Manifest example includes `service_compose` field |
+| 2026-03-21 (Chat 9) | `references/stacks/python-pytest.md` | **Fix**: sys.modules Mock Constructor Trap — MagicMock constructors discard kwargs; explicit attribute assignments required in task docs |
+| 2026-03-21 (Chat 9) | `references/writing-guide.md` | **Fix**: sys.modules mock attribute checkpoint in Wiring Task Tests section |
