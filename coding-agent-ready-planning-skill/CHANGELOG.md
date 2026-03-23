@@ -82,3 +82,4 @@
 | 2026-03-21 (Chat 9/T41) | `implementation-planning/references/plan-format.md` | **Fix**: Deployment task template — plan must NOT prescribe CMD/ENTRYPOINT; describe *what* not *how*; planning model researches during scaffold |
 | 2026-03-22 (Chat 9) | `SKILL.md` (agent-ready-plans) Step 3 | **Fix**: Scaffold verification checklist — 5 concrete steps (uv sync, chmod +x, verify lint, verify test, verify manifest paths) must pass before Step 3b |
 | 2026-03-22 (Chat 9) | `SKILL.md` (agent-ready-plans) Step 6 | **Fix**: Infra lint example in manifest missing `./` prefix — corrected to `./docs/plans/my-tasks/infra-lint.sh` |
+| 2026-03-22 (Chat 9) | `references/stacks/infra.md` | **Fix**: Docker research verification checklist — 5 concrete questions (entrypoint, initialization, CMD source, user/permissions, compose health) that must be answered before writing Dockerfile |
