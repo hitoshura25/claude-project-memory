@@ -24,6 +24,8 @@
 - `repo-map-regression` — Enabling Aider repo map caused degradation
 - `schema-trap` — Avro/JSON Schema/protobuf schema construction errors
 - `sysmodules-mock` — sys.modules MagicMock constructor kwargs discarded
+- `scaffold-regression` — Scaffold infrastructure failure (lint paths, missing deps, permissions)
+- `interface-contract-gap` — Interface Contract code block doesn't match validated stub
 
 ## Index
 
@@ -70,3 +72,5 @@
 | T39 | Qwen | 17✅ 1⚠️ | `integration-validated`, `task-doc-gap` | DAG Assembly | Reverted `--no-git`; matches T36 baseline; Integration 3/3 (clock skew on verify) | No (confirmation) |
 | T40 | Qwen | 8✅ 1⚠️ halted | `context-exhaustion`, `schema-trap` | Steps, Sleep | Post sys.modules fix; halted task 11 (Metal GPU OOM); Avro schema trap (pre-existing) | Yes (sys.modules fix) |
 | T41 | Gemini 3.1 FL | **17✅** Docker ❌ | `sysmodules-mock`, `schema-trap`, `docker-lifecycle` | DAG Assembly, Docker | **sys.modules fix VALIDATED**; Avro self-corrected; Docker exit(1); quota exhausted | Yes (sys.modules fix) |
+| T42 | Qwen | **INVALID** 11⚠️ | `scaffold-regression` | Settings (all tasks) | Lint not executable, `uv sync` missing, `./` prefix missing | Yes (scaffold checklist) |
+| T43 | Qwen | **INVALID** halted 1 | `interface-contract-gap` | Settings | Interface Contract had comments-as-defaults; Qwen removed actual defaults from stub | Yes (grounding covers IC) |

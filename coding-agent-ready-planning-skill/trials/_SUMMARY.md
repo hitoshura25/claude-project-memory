@@ -35,21 +35,23 @@
 | T29 | 2026-03-19 | Qwen 30B | 7✅ 1⚠️ 9 degraded 1❌ | Regression: missing persistent conn guidance → 9-task cascade |
 | T30 | 2026-03-19 | Gemini 3.1 Flash Lite | 2✅, hard-stop task 3 | Same regression: both models default to multi-connection SQLite |
 | T31 | 2026-03-19 | Qwen 30B | 8✅ 9⚠️ 1❌ | Clean branch: `:memory:` caught UUIDStore; Docker ✅; no cascade; 9 task doc gaps |
-| T32 | 2026-03-19 | Gemini 3.1 Flash Lite | **16✅** 2⚠️ 1❌ | Clean branch: UUIDStore ✅; Docker smoke test ✅ (HTTP 200); DAG ✅; 2 task doc gaps |
+| T32 | 2026-03-19 | Gemini 3.1 Flash Lite | 16✅ 2⚠️ 1❌ | Clean branch: UUIDStore ✅; Docker smoke test ✅ (HTTP 200); DAG ✅; 2 task doc gaps |
 | T33 | 2026-03-20 | Qwen 30B | 12✅ 5⚠️ | Code-grounding rule: +4✅ vs T31; Avro/DAG/UUIDStore fixed; ExtractionResult kwargs + uuid_filter remain; Docker exit(1) |
 | T34 | 2026-03-20 | Gemini 3.1 Flash Lite | 16✅ 1⚠️ | Code-grounding rule: GDrive+TotalCal fixed; HRV ExtractionResult kwargs; Docker exit(1) |
 | T35 | 2026-03-20 | Qwen 30B | **18✅** 0⚠️ | **Third Qwen clean sweep** — refined grounding rule; Docker ✅ (HTTP 200); 44 calls |
-| T36 | 2026-03-20 | Qwen 30B | 18✅ 1⚠️ | Three-compose + service_compose; **Integration ✅ 3/3**; DAG mock intermittent; 39 calls |
-| T37 | 2026-03-20 | Gemini 3.1 Flash Lite | 18✅ 1⚠️ | Three-compose + service_compose; **Integration ✅ 3/3**; TotalCal ExtractionResult kwargs intermittent; 37 calls |
+| T36 | 2026-03-20 | Qwen 30B | 18✅ 1⚠️ | Three-compose validated; **Integration ✅ 3/3**; DAG mock intermittent; 39 calls |
+| T37 | 2026-03-20 | Gemini 3.1 FL | 18✅ 1⚠️ | Three-compose validated; **Integration ✅ 3/3**; TotalCal ExtractionResult kwargs intermittent; 37 calls |
 | T38 | 2026-03-21 | Qwen 30B | 13✅ 2⚠️ OOM | **Regression**: repo map (`--subtree-only`) → Metal GPU OOM on DAG task + 2 uuid_filter failures |
 | T39 | 2026-03-21 | Qwen 30B | 17✅ 1⚠️ | Reverted to `--no-git`; matches T36 baseline; Integration 3/3 ✅ (clock skew on verify) |
-| T40 | 2026-03-21 | Qwen 30B | 8✅ 1⚠️ 1❌ halted | Post sys.modules fix; halted task 11 (Metal GPU OOM); Steps Avro schema trap (pre-existing) |
-| T41 | 2026-03-21 | Gemini 3.1 Flash Lite | **17✅** Docker ❌ | **sys.modules fix VALIDATED**; DAG 6/6 ✅; Avro self-corrected; Docker exit(1); quota exhausted |
+| T40 | 2026-03-21 | Qwen 30B | 8✅ 1⚠️ halted | Post sys.modules fix; halted task 11 (Metal GPU OOM); Steps Avro schema trap (pre-existing) |
+| T41 | 2026-03-21 | Gemini 3.1 FL | **17✅** Docker ❌ | **sys.modules fix VALIDATED**; DAG 6/6 ✅; Avro self-corrected; Docker exit(1); quota exhausted |
+| T42 | 2026-03-22 | Qwen 30B | **INVALID** — 11⚠️ | Scaffold regression: lint script not executable, `uv sync` missing, `./` prefix missing |
+| T43 | 2026-03-23 | Qwen 30B | **INVALID** — halted task 1 | Task doc Interface Contract had comments-as-defaults; Qwen removed actual defaults from stub |
 
 ---
 
-## Model Standings (as of T41 / Chat 9)
+## Model Standings (as of T43 / Chat 9)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. Baseline: 17–18✅ + integration 3/3 with `--no-git`. Repo map (T38) causes regression — do not use. T40 halted early (Metal GPU OOM).
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks clean, Docker exit(1). 40 calls. Stronger self-correction on Avro schemas than Qwen.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T42 + T43 both INVALID (scaffold/task doc bugs, not model issues). Awaiting valid trial on regenerated scaffold with all Chat 9 fixes.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks, Docker exit(1). Stronger self-correction on Avro schemas.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
