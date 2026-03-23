@@ -1,6 +1,6 @@
 # Key Learnings & Principles
 
-> Distilled from 41 trials across 9 chat sessions. These are the rules that govern
+> Distilled from 41+ trials across 9 chat sessions. These are the rules that govern
 > skill development. Always loaded at conversation start alongside `README.md`.
 
 ---
@@ -23,6 +23,7 @@
 
 - **Layer 0 lint gate**: Linter must return zero errors against pre-written test files before they can be embedded in task docs.
 - **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism.
+- **Scaffold verification checklist**: Before proceeding to Step 3b, five concrete checks must pass: dev deps installed (`uv sync`), lint scripts executable (`chmod +x`), lint command works from project root, test command finds pytest, manifest paths match with `./` prefix.
 
 ## Task Structure
 
@@ -30,6 +31,11 @@
 - **Cascade isolation**: Component tasks create files only; wiring is always a separate task. Component test_commands never include shared files.
 - **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
 - **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads.
+
+## Interface Contract Grounding
+
+- **Interface Contract code blocks must be copied from the validated stub, not the plan.** The stub was validated against tests in Step 3b. If the plan’s interface says `field: str  # default: "value"` but the stub has `field: str = "value"`, the task doc must use the stub version. The small model copies code blocks literally; comments masquerading as defaults remove actual defaults.
+- **Plan-format.md must require actual default values as code**: `field: str = "value"`, never `field: str  # default: "value"`. Added to the “Include” list in plan-format.md.
 
 ## Fixture Patterns
 
@@ -46,6 +52,7 @@
 ## Docker & Infrastructure
 
 - **Docker scaffold requires technology-specific research, not templates**: Before writing any Dockerfile, the planning model must research the base image's official Docker documentation — entrypoint behavior, built-in initialization mechanisms, environment variables, and volume/permission requirements. Templates cannot substitute for this because every framework has unique entrypoint behavior. See `stacks/infra.md` § "Step 0: Research the base image's Docker setup".
+- **Docker research verification checklist**: 4 gates must pass before writing the Dockerfile: (1) Does the entrypoint handle initialization? (2) What is the correct CMD? (3) What user and permissions? (4) Does `docker compose up --wait` succeed?
 - **Pip version pinning in Dockerfiles**: The planning model must build unpinned first, capture resolved versions via `pip freeze`, pin them in the Dockerfile, and rebuild.
 - **Dockerfile is scaffold, not a task deliverable**: The planning model writes, builds, pins versions, and validates the Dockerfile with hadolint during Step 3. It stays on disk — the small model only creates compose files.
 - **Test compose is scaffold too**: The planning model writes the test compose and verifies the full stack starts healthy via `docker compose up --wait`.
