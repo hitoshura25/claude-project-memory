@@ -3,7 +3,7 @@
 > **Purpose**: Persistent memory across chat sessions for the `devtools:agent-ready-plans` and
 > `devtools:implementation-planning` skills.
 >
-> **Skill location**: `~/claude-devtools/skills/agent-ready-plans/`
+> **Skill location**: `~/claude-devtools/skills/agent-ready-plans/` and `~/claude-devtools/skills/implementation-planning/`
 > **Test project**: `~/health-data-ai-platform` (airflow Google Drive ingestion service)
 
 ---
@@ -25,11 +25,13 @@ Load on-demand only when needed:
 
 ## Skill Overview
 
-Two paired skills:
-1. **`devtools:implementation-planning`** — turns a feature idea into a design doc + implementation plan with interface contracts and behavioral specs
-2. **`devtools:agent-ready-plans`** — takes those artifacts and produces self-contained task files + scaffold + runner script for local coding agents (Aider + local models via LM Studio)
+Two paired skills with distinct responsibilities:
+1. **`devtools:implementation-planning`** — turns a feature idea into a design doc + implementation plan + **validated scaffold on disk** (stubs, tests, conftest, Dockerfile, lint/smoke scripts). Owns all scaffolding, test writing, and validation.
+2. **`devtools:agent-ready-plans`** — reads validated artifacts from disk and packages them into self-contained task files + manifest + runner script for local coding agents (Aider + local models via LM Studio). Owns only task doc generation and packaging.
 
 **Key architectural decision**: The planning model writes complete, verified tests for each task (TDD approach). The small local model implements the code to make them pass. The planning model owns test correctness — the small model owns implementation.
+
+**Handoff artifact**: Files on disk (stubs, tests, conftest, Dockerfile, scripts), not plan prose. The agent-ready skill reads code from disk, never interprets plan prose for code-level details.
 
 ---
 
@@ -38,12 +40,13 @@ Two paired skills:
 ```
 claude-devtools/
   skills/
-    agent-ready-plans/
+    implementation-planning/
       SKILL.md
-      task-template.md
       references/
-        writing-guide.md
+        plan-format.md
+        wiring-completeness.md
         tooling.md
+        test-writing-guide.md
         stacks/
           python-pytest.md
           python-pytest/
@@ -55,12 +58,14 @@ claude-devtools/
         lint-ruff-wrapper.sh
         infra-lint-wrapper-template.sh
         docker-smoke-test-template.sh
-        run-tasks-template.sh
-    implementation-planning/
+        validate-stubs.sh
+    agent-ready-plans/
       SKILL.md
+      task-template.md
       references/
-        plan-format.md
-        wiring-completeness.md
+        task-doc-guide.md
+      scripts/
+        run-tasks-template.sh
 ```
 
 ---
@@ -68,14 +73,14 @@ claude-devtools/
 ## Strategy (Current)
 
 **Strategy 3: TDD — Planning Model Writes Tests.** The planning model writes complete, verified tests
-per task (Step 3b). Small model implements to pass them. Strategies 1 (Code-Complete) and
+per task (Step 4). Small model implements to pass them. Strategies 1 (Code-Complete) and
 2 (Spec-Based) were abandoned — see `trials/T01-strategy-comparison.md` for rationale.
 
 ---
 
-## Model Standings (as of T43 / Chat 9)
+## Model Standings (as of T44 / Chat 10)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T42 + T43 both INVALID (scaffold/task doc bugs, not model issues). Awaiting valid trial on regenerated scaffold with all Chat 9 fixes.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T42–T44 all have planning-model scaffold bugs, not model issues. Awaiting valid trial with validate-stubs.sh gate.
 - **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks, Docker exit(1). Stronger self-correction on Avro schemas.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
@@ -106,7 +111,7 @@ coding-agent-ready-planning-skill/
     ├── _INDEX.md           ← Structured tags per trial (find by pattern)
     ├── T01-strategy-comparison.md
     ├── ...
-    └── T43-qwen-interface-contract-regression.md
+    └── T44-qwen-post-refactor-validation-gaps.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md` + a row in `_INDEX.md`.

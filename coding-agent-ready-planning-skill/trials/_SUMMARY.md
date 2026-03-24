@@ -47,11 +47,12 @@
 | T41 | 2026-03-21 | Gemini 3.1 FL | **17✅** Docker ❌ | **sys.modules fix VALIDATED**; DAG 6/6 ✅; Avro self-corrected; Docker exit(1); quota exhausted |
 | T42 | 2026-03-22 | Qwen 30B | **INVALID** — 11⚠️ | Scaffold regression: lint script not executable, `uv sync` missing, `./` prefix missing |
 | T43 | 2026-03-23 | Qwen 30B | **INVALID** — halted task 1 | Task doc Interface Contract had comments-as-defaults; Qwen removed actual defaults from stub |
+| T44 | 2026-03-24 | Qwen 30B | 8✅ 3⚠️ (partial) | Post-refactor: scaffold validation gaps (ABC, fixture, truncated output); validate-stubs.sh fix |
 
 ---
 
-## Model Standings (as of T43 / Chat 9)
+## Model Standings (as of T44 / Chat 10)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T42 + T43 both INVALID (scaffold/task doc bugs, not model issues). Awaiting valid trial on regenerated scaffold with all Chat 9 fixes.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T42–T44 all have planning-model scaffold bugs, not model issues. Awaiting valid trial with validate-stubs.sh gate.
 - **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks, Docker exit(1). Stronger self-correction on Avro schemas.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.

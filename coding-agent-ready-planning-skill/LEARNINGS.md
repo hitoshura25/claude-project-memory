@@ -1,6 +1,6 @@
 # Key Learnings & Principles
 
-> Distilled from 41+ trials across 9 chat sessions. These are the rules that govern
+> Distilled from 44 trials across 10 chat sessions. These are the rules that govern
 > skill development. Always loaded at conversation start alongside `README.md`.
 
 ---
@@ -9,6 +9,13 @@
 
 - **Fixes must be generic and upstream** in the skill files, never band-aids on individual task docs.
 - **Skill content must not reference trial numbers or chat-specific history**. Trial references are meaningless to the planning model. Skill guidance should explain the *principle* and *why*, not cite historical incidents.
+
+## Skill Architecture
+
+- **Implementation-planning owns scaffold and validation**: Stubs, tests, conftest, Dockerfile, lint/smoke scripts, and the three-layer validation gate all live in implementation-planning. The plan provides decomposition and behavioral intent — the on-disk artifacts are the code-level authority.
+- **Agent-ready-plans owns packaging only**: Reads validated artifacts from disk. Generates task docs, manifest, and runner. Never interprets plan prose for code-level details.
+- **Plans must not contain interface code blocks**: Code blocks in plans look authoritative but are unvalidated. The planning model makes code-level decisions during stub writing (Step 3) and validates them via `validate-stubs.sh` (Step 4). Prose descriptions of interfaces are sufficient — the stubs are the authority.
+- **Layer 2 validation must use the validation script**: `validate-stubs.sh` runs each test file individually and programmatically checks failure types. Manual `pytest | tail` or `| head` truncates output and hides failures. The script must exit 0 before proceeding.
 
 ## Context & Model Constraints
 
@@ -23,19 +30,14 @@
 
 - **Layer 0 lint gate**: Linter must return zero errors against pre-written test files before they can be embedded in task docs.
 - **Tests referenced by path, not embedded**: Task docs point to on-disk test files rather than embedding copies. Embedding creates a second source of truth that diverges due to LLM non-determinism.
-- **Scaffold verification checklist**: Before proceeding to Step 3b, five concrete checks must pass: dev deps installed (`uv sync`), lint scripts executable (`chmod +x`), lint command works from project root, test command finds pytest, manifest paths match with `./` prefix.
+- **Scaffold verification checklist**: Before proceeding to test validation, five concrete checks must pass: dev deps installed (`uv sync`), lint scripts executable (`chmod +x`), lint command works from project root, test command finds pytest, manifest paths match with `./` prefix.
 
 ## Task Structure
 
 - **Import integrity pattern**: Wiring task docs must enumerate exact class names with explicit instruction not to import anything not listed.
 - **Cascade isolation**: Component tasks create files only; wiring is always a separate task. Component test_commands never include shared files.
-- **Deferred vs Service-Gated**: Integration tests are service-gated (runner skips when services unavailable), not deferred (which halts the runner).
+- **Deferred vs Service-Gated**: Integration tests are service-gated (runner fails when services unavailable), not deferred (which halts the runner).
 - **Long literals must be multi-line in Behavior sections**: SQL queries, Avro schemas, and nested dicts shown in task docs must be broken across lines. The model copies whatever form it reads.
-
-## Interface Contract Grounding
-
-- **Interface Contract code blocks must be copied from the validated stub, not the plan.** The stub was validated against tests in Step 3b. If the plan’s interface says `field: str  # default: "value"` but the stub has `field: str = "value"`, the task doc must use the stub version. The small model copies code blocks literally; comments masquerading as defaults remove actual defaults.
-- **Plan-format.md must require actual default values as code**: `field: str = "value"`, never `field: str  # default: "value"`. Added to the “Include” list in plan-format.md.
 
 ## Fixture Patterns
 
@@ -47,7 +49,7 @@
 
 ## Schema Validation
 
-- **Include validated schemas when tests check parsing**: If a test validates schema structure (Avro `parse_schema`, JSON Schema, protobuf descriptors), the planning model must construct the exact schema during Step 3b, validate it against the library, and include it verbatim in the task doc. Small models cannot reliably construct schemas with library-specific constraints (named type deduplication, reference rules). Pre-existing intermittent failure — seen in T31 and T40 on Avro schemas with shared nested record types.
+- **Include validated schemas when tests check parsing**: If a test validates schema structure (Avro `parse_schema`, JSON Schema, protobuf descriptors), the planning model must construct the exact schema during scaffold validation, validate it against the library, and include it verbatim in the task doc. Small models cannot reliably construct schemas with library-specific constraints (named type deduplication, reference rules).
 
 ## Docker & Infrastructure
 
