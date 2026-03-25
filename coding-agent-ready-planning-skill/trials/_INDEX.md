@@ -49,3 +49,4 @@
 | T42 | Qwen | **INVALID** 11⚠️ | `scaffold-regression` | Settings (all tasks) | Lint not executable, `uv sync` missing, `./` prefix missing | Yes (scaffold checklist) |
 | T43 | Qwen | **INVALID** halted 1 | `interface-contract-gap` | Settings | Interface Contract had comments-as-defaults; Qwen removed actual defaults from stub | Yes (grounding covers IC) |
 | T44 | Qwen | 8✅ 3⚠️ (partial) | `scaffold-validation-gap`, `abc-incomplete`, `fixture-gap` | Downloader, HeartRate, Sleep | Post-refactor: Claude Code truncated Layer 2 output; @abstractmethod + missing fixture | Yes (validate-stubs.sh, plan code blocks removed) |
+| T45 | Qwen | 16✅ 3⚠️ | `test-writing-bug`, `uuid-format`, `incomplete-test` | BaseExtractor, DriveClient, Integration | T44 fixes validated; 3 planning-model test bugs (UUID format, stub tests, skipif) | Yes (validate-stubs.sh log location) |

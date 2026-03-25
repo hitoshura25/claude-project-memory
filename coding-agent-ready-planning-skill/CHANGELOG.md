@@ -90,3 +90,4 @@
 | 2026-03-24 (Chat 10/T44) | `implementation-planning/SKILL.md` Step 4 | **Fix**: Layer 2 now requires `validate-stubs.sh` — explicit prohibition against `pytest | tail` or manual/truncated output |
 | 2026-03-24 (Chat 10/T44) | `implementation-planning/references/test-writing-guide.md` | **Fix**: Layer 2 references validate-stubs.sh with specific rejected error types |
 | 2026-03-24 (Chat 10/T44) | `implementation-planning/references/plan-format.md` | **Fix**: Interface code blocks removed — prose bullet points only. Prevents unvalidated code decisions from leaking into stubs |
+| 2026-03-25 (Chat 10/T45) | `implementation-planning/scripts/validate-stubs.sh` | **Fix**: Log file written to `$SERVICE_ROOT/` instead of scripts directory; `COLUMNS=300`; bare `assert` detection; removed service-gated skip logic |
