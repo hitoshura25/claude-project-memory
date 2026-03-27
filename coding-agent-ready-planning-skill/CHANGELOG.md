@@ -99,3 +99,4 @@
 | 2026-03-26 (Chat 10/T47) | `implementation-planning/SKILL.md` Step 3c | **Fix**: Integration test files are scaffold — written by planning model during scaffold, not implementing-model deliverables |
 | 2026-03-26 (Chat 10/T47) | `agent-ready-plans/SKILL.md` Step 3 + manifest | **Fix**: Integration test tasks have `files_created: []`; implementing model runs tests, doesn't write them |
 | 2026-03-26 (Chat 10/T47) | `agent-ready-plans/references/task-doc-guide.md` | **Fix**: Service-gated section updated — integration test files are scaffold; task doc says "do not modify the test file" |
+| 2026-03-26 (Chat 10/T46) | `agent-ready-plans/references/task-doc-guide.md` | **Experiment**: Behavior sections describe semantics (what), not implementation (how). SQL, algorithms, data structure choices left to model — tests are the authority. May revert if regressions appear |
