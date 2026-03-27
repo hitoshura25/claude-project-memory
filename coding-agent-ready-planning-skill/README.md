@@ -80,7 +80,7 @@ per task (Step 4). Small model implements to pass them. Strategies 1 (Code-Compl
 
 ## Model Standings (as of T47 / Chat 10)
 
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20, **T47**. Post-refactor architecture validated end-to-end. Reference model.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T47: 18✅ 1⚠️ (modified test file on integration). All 18 service tasks clean post-refactor.
 - **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T46: 17✅ 1⚠️ (UUIDStore SQL parameterization). Strong but recurring UUIDStore issue.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
@@ -92,6 +92,7 @@ Both models validated on the full 19-task pipeline including Docker smoke test a
 
 3. **ACTIONABLE** — Runner: pre-task file backup + restore on critical export loss
 22. **INTERMITTENT** — Both models occasionally pass extra kwargs to project-defined dataclasses or fail uuid_filter. Hits different tasks on different runs. Not systematic — grounding rule addresses it but doesn't eliminate non-deterministic model behavior.
+23. **SCAFFOLD GAP** — Integration test `test_e2e.py` assumes MinIO bucket exists; test compose doesn't pre-create it. Gemini worked around by modifying test file (T47). Fix: either pre-create bucket in test compose or add bucket creation to conftest/fixture.
 
 > Full historical issue list (including resolved): see `RESOLVED_ISSUES.md`
 

@@ -1,10 +1,10 @@
-# T47 — Gemini 3.1 Flash Lite: 19/19 Clean Sweep (Chat 10)
+# T47 — Gemini 3.1 Flash Lite: 18✅ 1⚠️ — Post-Refactor Near-Sweep (Chat 10)
 
 **Date**: 2026-03-26
 **Model**: Gemini 3.1 Flash Lite (API, free tier)
 **Log**: `run-20260326-194539.log`
 **Chat**: 10
-**Verdict**: **19✅ — CLEAN SWEEP** — all 19 tasks passed including Docker smoke test (HTTP 200) and integration tests (3/3)
+**Verdict**: 18✅ 1⚠️ — all 18 service tasks passed; task 19 (integration) passed but by modifying the test file (constraint violation)
 
 ## Result
 
@@ -28,41 +28,42 @@
 | 16 ExerciseSession | ✅ | 2 | E501 lint fixes |
 | 17 Wire DAG | ✅ | 1 | |
 | 18 Docker | ✅ | 1 | **Smoke test HTTP 200**; independent verification ✅ |
-| 19 Integration | ✅ | 4 | Self-corrected: NoSuchBucket → bucket creation → 3/3 passed |
+| 19 Integration | ⚠️ DEGRADED | 4 | Tests passed but **Gemini modified test_e2e.py** (constraint violation) |
 
 **Total: 27 LLM calls, 24 E501 occurrences**
 
 ## Key Highlights
 
-### First post-refactor clean sweep
+### First post-refactor trial with all 18 service tasks passing
 
-This is the first clean sweep since the major skill refactor (Chat 10) that split implementation-planning from agent-ready-plans. All 19 tasks passed, including:
+All service tasks (1–18) passed cleanly, including:
 - Docker smoke test with HTTP 200 and successful independent verification
-- Integration tests 3/3 (self-corrected from initial NoSuchBucket error)
 - UUIDStore passed cleanly (no SQL double clause)
+- All T44/T45 fixes validated
+
+### Task 19: Integration test constraint violation
+
+Gemini modified `test_e2e.py` despite the task doc's "do not modify the test file" instruction. Changes included:
+- Restructured the service check logic (removed `_check_services()` function, inlined socket checks)
+- Changed `_uuid` alias to bare `uuid`
+- Removed the module docstring
+- Added bucket creation logic (`s3.create_bucket(Bucket=_MINIO_BUCKET)`) to work around `NoSuchBucket` error
+- Multiple E501 lint fix iterations on the modified file
+
+The tests ultimately passed (3/3), but the approach violates the constraint. The `NoSuchBucket` error suggests the test compose doesn't pre-create the MinIO bucket — this is a scaffold gap that should be fixed in the test compose or conftest, not by the implementing model editing the test file.
 
 ### Gemini vs Qwen on UUIDStore
 
-Gemini passed UUIDStore on the first call with correct SQL parameterization. Qwen (T46) appended `AND record_type = ?` twice. The task doc is identical for both runs — this is a model-level reading comprehension difference, not a skill issue.
-
-### Integration test self-correction
-
-The integration test initially failed with `NoSuchBucket` (MinIO bucket didn't exist yet). Gemini self-corrected by adding bucket creation logic, then all 3 integration tests passed. This consumed 4 LLM calls total but succeeded within the reflection budget.
+Gemini passed UUIDStore on the first call with correct SQL parameterization. Qwen (T46) appended `AND record_type = ?` twice. The task doc is identical — model-level reading comprehension difference.
 
 ### Docker independent verification passed
 
-Unlike T46 (Qwen) where Docker Desktop cache corruption blocked the independent verification, Gemini's run had no cache issues — both the smoke test and independent verification passed cleanly.
+Unlike T46 (Qwen) where Docker Desktop cache corruption blocked the verification, Gemini's run had no cache issues.
 
 ## E501 Pattern
 
-24 E501 occurrences across 4 extractors + integration tests. Same pattern as T46 — inline SQL queries exceeding 88 chars. Gemini self-corrects on all, costing 1 extra call per affected task.
+24 E501 occurrences across 4 extractors + integration tests. Same pattern as T46 — inline SQL queries exceeding 88 chars. Gemini self-corrects on all.
 
 ## Outcome
 
-**Fourth Gemini clean sweep** (after T12, T17, T20). First clean sweep on the post-refactor architecture. Validates the refactored skill structure end-to-end:
-- implementation-planning scaffold is correct
-- agent-ready task docs are grounded in on-disk artifacts
-- validate-stubs.sh gates are working
-- All T44/T45 fixes validated
-- Docker lifecycle complete (build → health → smoke → verify)
-- Integration tests pass with live services
+18✅ 1⚠️. Not a clean sweep due to the test file modification on task 19. All 18 service tasks (including Docker) passed cleanly. The integration test constraint violation suggests the test compose may need to pre-create the MinIO bucket, or the test file's bucket setup should be part of the scaffold.
