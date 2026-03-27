@@ -53,3 +53,4 @@
 | T46 | Qwen | 17✅ 1⚠️ | `sql-parameterization`, `docker-cache` | UUIDStore | SQL double `AND record_type = ?`; Docker smoke ✅; task 19 blocked by Docker cache | No |
 | T47 | Gemini 3.1 FL | 18✅ 1⚠️ | `test-file-modified`, `integration-bucket` | Integration | 18/18 service tasks ✅; integration passed but modified test_e2e.py (NoSuchBucket workaround) | No |
 | T48 | Qwen | 15✅ 3⚠️ | `module-level-instantiation`, `cascade` | Settings, MinIO, RabbitMQ | UUIDStore ✅ (0 E501); Settings task doc + stub comment told Qwen to instantiate at module level; 3-task cascade | Yes (stub/task doc fix needed) |
+| T49 | Gemini 3.1 FL | **18✅** | `module-level-instantiation`, `self-corrected` | Settings | Same Settings bug as T48; Gemini self-corrected with setdefault workaround; Docker + integration ✅; 23 calls | No |
