@@ -94,3 +94,8 @@
 | 2026-03-26 (Chat 10/T45→T46) | `implementation-planning/scripts/validate-stubs.sh` | **Fix**: AST-based incomplete test detection — rejects test functions whose body ends with `raise NotImplementedError` |
 | 2026-03-26 (Chat 10/T45→T46) | `implementation-planning/references/test-writing-guide.md` | **Fix**: Tests must never contain `raise NotImplementedError`; format-sensitive return value testing guidance |
 | 2026-03-26 (Chat 10/T45→T46) | `implementation-planning/SKILL.md` Step 4 | **Fix**: Every test function must be complete; if planning model hits limits, stop and tell user |
+| 2026-03-26 (Chat 10/T46+T47) | `implementation-planning/scripts/docker-smoke-test-template.sh` | **Fix**: Removed `docker system prune -f` from cleanup trap — it deletes build cache needed by runner's independent verification rebuild |
+| 2026-03-26 (Chat 10/T46+T47) | `agent-ready-plans/references/task-doc-guide.md` | **Fix**: SQL constants in Behavior sections must use fenced code blocks with parenthesized multi-line form, not inline prose |
+| 2026-03-26 (Chat 10/T47) | `implementation-planning/SKILL.md` Step 3c | **Fix**: Integration test files are scaffold — written by planning model during scaffold, not implementing-model deliverables |
+| 2026-03-26 (Chat 10/T47) | `agent-ready-plans/SKILL.md` Step 3 + manifest | **Fix**: Integration test tasks have `files_created: []`; implementing model runs tests, doesn't write them |
+| 2026-03-26 (Chat 10/T47) | `agent-ready-plans/references/task-doc-guide.md` | **Fix**: Service-gated section updated — integration test files are scaffold; task doc says "do not modify the test file" |
