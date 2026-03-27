@@ -78,13 +78,13 @@ per task (Step 4). Small model implements to pass them. Strategies 1 (Code-Compl
 
 ---
 
-## Model Standings (as of T44 / Chat 10)
+## Model Standings (as of T47 / Chat 10)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T42–T44 all have planning-model scaffold bugs, not model issues. Awaiting valid trial with validate-stubs.sh gate.
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks, Docker exit(1). Stronger self-correction on Avro schemas.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20, **T47**. Post-refactor architecture validated end-to-end. Reference model.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T46: 17✅ 1⚠️ (UUIDStore SQL parameterization). Strong but recurring UUIDStore issue.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
 
-Both models validated on the full 19-task pipeline including Docker smoke test and live integration tests (T36, T37).
+Both models validated on the full 19-task pipeline including Docker smoke test and live integration tests.
 
 ---
 
@@ -111,7 +111,7 @@ coding-agent-ready-planning-skill/
     ├── _INDEX.md           ← Structured tags per trial (find by pattern)
     ├── T01-strategy-comparison.md
     ├── ...
-    └── T44-qwen-post-refactor-validation-gaps.md
+    └── T47-gemini-19-of-19-clean-sweep.md
 ```
 
 Each trial file is **immutable once written**. New trials add a new file + a row in `_SUMMARY.md` + a row in `_INDEX.md`.

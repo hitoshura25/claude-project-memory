@@ -51,3 +51,4 @@
 | T44 | Qwen | 8✅ 3⚠️ (partial) | `scaffold-validation-gap`, `abc-incomplete`, `fixture-gap` | Downloader, HeartRate, Sleep | Post-refactor: Claude Code truncated Layer 2 output; @abstractmethod + missing fixture | Yes (validate-stubs.sh, plan code blocks removed) |
 | T45 | Qwen | 16✅ 3⚠️ | `test-writing-bug`, `uuid-format`, `incomplete-test` | BaseExtractor, DriveClient, Integration | T44 fixes validated; 3 planning-model test bugs (UUID format, stub tests, skipif) | Yes (validate-stubs.sh log location) |
 | T46 | Qwen | 17✅ 1⚠️ | `sql-parameterization`, `docker-cache` | UUIDStore | SQL double `AND record_type = ?`; Docker smoke ✅; task 19 blocked by Docker cache | No |
+| T47 | Gemini 3.1 FL | **19✅** | `clean-sweep`, `integration-validated` | All | **Fourth Gemini clean sweep**; first post-refactor; Docker ✅ + Integration 3/3; 27 calls | No (validation) |

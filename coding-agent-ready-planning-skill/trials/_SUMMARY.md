@@ -49,12 +49,13 @@
 | T43 | 2026-03-23 | Qwen 30B | **INVALID** — halted task 1 | Task doc Interface Contract had comments-as-defaults; Qwen removed actual defaults from stub |
 | T44 | 2026-03-24 | Qwen 30B | 8✅ 3⚠️ (partial) | Post-refactor: scaffold validation gaps (ABC, fixture, truncated output); validate-stubs.sh fix |
 | T45 | 2026-03-25 | Qwen 30B | 16✅ 3⚠️ | T44 fixes validated (HeartRate, Sleep, Docker ✅); 3 planning-model test bugs remain |
-| T46 | 2026-03-26 | Qwen 30B | 17✅ 1⚠️ | Best post-refactor: UUIDStore SQL double clause; Docker smoke ✅ (HTTP 200); task 19 blocked by Docker cache |
+| T46 | 2026-03-26 | Qwen 30B | 17✅ 1⚠️ | Best post-refactor Qwen: UUIDStore SQL double clause; Docker smoke ✅; task 19 blocked by Docker cache |
+| T47 | 2026-03-26 | Gemini 3.1 FL | **19✅** | **Fourth Gemini clean sweep** — first post-refactor; Docker ✅ + Integration 3/3; 27 calls |
 
 ---
 
-## Model Standings (as of T46 / Chat 10)
+## Model Standings (as of T47 / Chat 10)
 
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T46: 17✅ 1⚠️ (18/18 ran, only UUIDStore degraded). Post-refactor best. Recurring UUIDStore SQL parameterization issue.
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T37: 18✅ + integration 3/3 ✅. T41: 17✅ service tasks, Docker exit(1). Awaiting post-refactor trial.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20, **T47**. Post-refactor architecture validated end-to-end. Reference model.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T46: 17✅ 1⚠️ (UUIDStore SQL parameterization). Strong but recurring UUIDStore issue.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
