@@ -52,3 +52,4 @@
 | T45 | Qwen | 16✅ 3⚠️ | `test-writing-bug`, `uuid-format`, `incomplete-test` | BaseExtractor, DriveClient, Integration | T44 fixes validated; 3 planning-model test bugs (UUID format, stub tests, skipif) | Yes (validate-stubs.sh log location) |
 | T46 | Qwen | 17✅ 1⚠️ | `sql-parameterization`, `docker-cache` | UUIDStore | SQL double `AND record_type = ?`; Docker smoke ✅; task 19 blocked by Docker cache | No |
 | T47 | Gemini 3.1 FL | 18✅ 1⚠️ | `test-file-modified`, `integration-bucket` | Integration | 18/18 service tasks ✅; integration passed but modified test_e2e.py (NoSuchBucket workaround) | No |
+| T48 | Qwen | 15✅ 3⚠️ | `module-level-instantiation`, `cascade` | Settings, MinIO, RabbitMQ | UUIDStore ✅ (0 E501); Settings task doc + stub comment told Qwen to instantiate at module level; 3-task cascade | Yes (stub/task doc fix needed) |

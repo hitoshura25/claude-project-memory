@@ -51,11 +51,12 @@
 | T45 | 2026-03-25 | Qwen 30B | 16✅ 3⚠️ | T44 fixes validated (HeartRate, Sleep, Docker ✅); 3 planning-model test bugs remain |
 | T46 | 2026-03-26 | Qwen 30B | 17✅ 1⚠️ | Best post-refactor Qwen: UUIDStore SQL double clause; Docker smoke ✅; task 19 blocked by Docker cache |
 | T47 | 2026-03-26 | Gemini 3.1 FL | 18✅ 1⚠️ | 18/18 service tasks ✅; integration test passed but modified test_e2e.py (constraint violation); 27 calls |
+| T48 | 2026-03-27 | Qwen 30B | 15✅ 3⚠️ | UUIDStore ✅ (0 E501!); Settings cascade — task doc told Qwen to instantiate at module level; Docker + integration ✅ |
 
 ---
 
-## Model Standings (as of T47 / Chat 10)
+## Model Standings (as of T48 / Chat 10)
 
-- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T47: 18✅ 1⚠️ (modified test file on integration). All 18 service tasks clean post-refactor.
-- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T46: 17✅ 1⚠️ (UUIDStore SQL parameterization). Strong but recurring UUIDStore issue.
+- **Gemini 3.1 Flash Lite**: Clean sweeps on T12, T17, T20. T47: 18✅ 1⚠️. Awaiting trial on latest regeneration.
+- **Qwen 3 Coder 30B**: Clean sweeps on T15, T18, T35. T48: UUIDStore fixed (0 E501), but Settings task doc bug caused 3-task cascade. Docker + integration both clean.
 - **Codestral 22B**: Permanently disqualified (T8, T11, T16). Not fixable at skill level.
