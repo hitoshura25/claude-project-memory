@@ -1,108 +1,130 @@
-# Prototype-Driven Planning Skill — Context Summary
+# Prototype-Driven Planning Skills — Project Context
 
-> This is conversation context only. The actual skill files live at
-> `~/claude-devtools/skills/prototype-driven-planning/`.
+> **Purpose**: Persistent memory across chat sessions for the prototype-driven
+> skill set (planning → task decomposition → implementation).
+>
+> **Skill locations**:
+> - `~/claude-devtools/skills/prototype-driven-planning/`
+> - `~/claude-devtools/skills/prototype-driven-task-decomposition/`
+> - `~/claude-devtools/skills/prototype-driven-implementation/` (not yet built)
+>
+> **Commands**:
+> - `/prototype-plan <feature>` → planning skill
+> - `/prototype-task-decompose <design-doc>` → decomposition skill
+>
+> **Test project**: `~/health-data-ai-platform` (airflow Google Drive ingestion)
 
-## What This Skill Does
+---
 
-Takes a feature idea through three phases:
+## Conversation-Start Protocol
 
-1. **Discovery** — Inventory the project, identify core technical risk, research
-2. **Tracer Bullet Prototype** — Build minimum code proving core risk, validate
-   toolchain (lint, tests, Dockerfile, end-to-end), research cross-cutting concerns
-3. **Vetted Design Doc** — Generate a design doc grounded in prototype reality
+Read these files in order:
+1. **This file** — orientation, standings, open issues
+2. **`LEARNINGS.md`** — distilled principles (always relevant)
+3. **`trials/_SUMMARY.md`** — scoreboard
 
-The design doc is the deliverable. It's a specification validated against working
-code, not a hallucinated wish list.
+Load on-demand only when needed:
+- `references/architecture-rationale.md` — why prototype-first, multi-model design, tool selection
+- `references/stack-reference.md` — tool versions, configs, CLI flags, doc links
+- `gemini_conversation.txt` — raw Gemini consultation transcript (historical)
+- `trials/_INDEX.md` — structured tags per trial (find trials by failure pattern)
+- `trials/T<NN>-*.md` — individual trial detail (read when analyzing a specific trial)
 
-## Skill Structure
+---
 
-```
-~/claude-devtools/skills/prototype-driven-planning/
-├── SKILL.md                           # ~130 lines, narrow trigger, 3 phases with pauses
-└── references/
-    ├── phase-1-discovery.md           # Project inventory, core risk, research guidance
-    ├── phase-2-prototype.md           # Build/run/iterate, toolchain, end-to-end, research
-    ├── phase-3-design-doc.md          # Grounded writing guidance, consumability rules
-    └── design-doc-template.md         # Exact output structure for design docs
-```
+## Current State (2026-03-28)
 
-A companion slash command exists at `~/claude-devtools/commands/prototype-plan.md`
-for invocation via `/prototype-plan <feature idea>`.
+### Built and Validated
 
-## Key Design Decisions
+**prototype-driven-planning** — 3 phases (Discovery → Tracer Bullet → Design Doc)
+with mandatory pauses. Produces `docs/design/<feature>.md` and
+`prototypes/<feature>/`. Validated across multiple test runs.
 
-- **Narrow trigger**: Only activates when prototype-first flow is explicitly requested
-- **Pauses between every phase**: User must confirm before proceeding
-- **Feature idea via `$ARGUMENTS`**: `/prototype-plan Add health data sync module`
-- **Prototype location**: `prototypes/<feature-name>/` within the project
-- **Design doc location**: `docs/design/<feature-name>.md`
-- **Prototypes are immutable by convention**: No freeze/copy mechanism; the
-  `prototypes/` directory convention signals they shouldn't be modified
-- **Dockerfile is conditional**: Only for deployable services/jobs; skipped for
-  mobile apps, libraries, CLI tools, features added to existing services
+**prototype-driven-task-decomposition** — 3 phases (Analysis → Task Generation →
+Validation/Output). Produces `tasks/<feature>/tasks.json` (machine-readable) and
+individual `task-NN-<slug>.md` files (human-readable). Key features:
 
-## Phase 2 Structure (evolved over 3 iterations)
+- **Strict TDD task pairing**: Every task has `task_type: "test"` or
+  `task_type: "implementation"`. Test tasks write tests first; implementation
+  tasks write code and run those tests. A task never writes both.
+- **PydanticAI schema** at `scripts/task_schema.py` with `validate_tdd_pairing`
+  validator — enforces that implementation tasks with tests depend on at least
+  one test task.
+- **Scaffold stubs**: Task-01 creates stub modules that raise `NotImplementedError`
+  with correct signatures, so test tasks can import and write tests that fail
+  for the right reason (not `ImportError`).
+- **Numbered questions at Phase 1**: Ambiguities surfaced as explicit numbered
+  questions before task generation proceeds.
+- **Interface dependencies**: Tasks depend on modules they'll import, so the
+  implementing model can read the real interface.
+- **`uv run --with pydantic`** for schema validation in Claude Code (venv
+  activation doesn't persist across shell sessions).
 
-Phase 2 has four steps, refined through test runs:
+### Not Yet Built
 
-1. **Core Code** — Build minimum code proving the core technical risk
-2. **Toolchain Validation** — Lint setup, minimal tests, conditional Dockerfile
-3. **End-to-End Validation** — Prove the prototype works from the outside
-   (Docker health check, mobile UI test, library import test, etc.)
-4. **Cross-Cutting Research** — Security, deployment, additional testing patterns
+**prototype-driven-implementation** — The multi-model pipeline that executes
+tasks from `tasks.json`. Planned architecture:
 
-The end-to-end validation step was the key insight from iteration 3: building a
-Docker image isn't the same as proving the service works. The prototype must be
-validated the way its actual consumer will use it.
+- LangGraph state machine processes tasks in topological order
+- Each task routed to Aider with a local model (Qwen 3 Coder 30B via LM Studio)
+- Aider runs with `--test-cmd` and `--lint-cmd` for TDD feedback loop
+- Circuit breakers: after N consecutive failures, escalate to Gemini Flash
+- Final review by Claude Opus
+- PydanticAI validates contracts between pipeline phases
+- Failed tasks marked for human intervention, pipeline continues
+
+---
 
 ## Test Run Results
 
-### Run 1 (session f75b5f43)
-- Prototype: 2 files (script + README), no tests, no Docker
-- Design doc: Testing and containerization sections were research-based, not proven
-- Outcome: Worked but too speculative in toolchain sections
+### Planning Skill
+- Session `f75b5f43-fd52-4138-87ad-c7c18589fa07` — First test run
+- Session `a7c48f00-b614-4086-a640-b623a00f5a97` — Second test run (added E2E validation)
 
-### Run 2 (session a7c48f00)
-- Added toolchain validation: lint, 15 tests, Dockerfile that builds
-- Design doc: Testing and containerization grounded in working config
-- Outcome: Better, but Docker "worked" only meant the image built — not that the
-  service was functional
+### Decomposition Skill
+- Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks, pre-TDD)
+- Session `b2354707-0024-45db-bb9a-7ff872e39271` — Second run (11 tasks, interface deps fixed)
+- Session `64052f92-5393-4425-8286-1389124c6feb` — Third run (27 tasks, full TDD pairing,
+  schema validation caught and self-corrected a TDD violation on task-27)
 
-### Run 3 (session d7bd2674) — Current
-- Added end-to-end validation: actual `airflow dags test` inside container
-- Prototype: 6 files including a real DAG, conftest.py with Airflow module patching
-- Design doc: Significantly richer — XCom 48KB limit, `airflow db init` vs
-  `db migrate`, FERNET_KEY encryption warning, pika sync compatibility — all
-  discovered during actual execution, not research
-- 7 distinct toolchain surprises captured in README
-- Outcome: Design doc quality is where we want it
+### Implementation Skill
+See `trials/_SUMMARY.md` for ongoing trial scoreboard.
 
-## Key Learnings
+---
 
-- **Prototype-first eliminates speculative planning bugs**: The model writes code,
-  runs it, and fixes based on real feedback. Design docs observe what worked.
-- **Toolchain validation matters as much as core logic**: Lint config, test
-  framework setup, Docker entrypoint behavior — these are where implementation
-  models get stuck. Proving them in the prototype prevents iteration loops later.
-- **End-to-end validation surfaces architectural questions**: The message format
-  mismatch between the Airflow publisher and the ETL engine's expected
-  `HealthDataMessage` schema only surfaced because the prototype actually published
-  to RabbitMQ.
-- **"Minimal tests" > "one test"**: The right number of tests is enough to prove
-  the toolchain works and the core logic is correct — not one for the sake of one,
-  but not exhaustive coverage either.
-- **Skill files live locally only**: `~/claude-devtools/` is the home. The
-  `claude-project-memory` repo is strictly for conversation context.
+## File Map
 
-## Future Phases (Not Yet Built)
+```
+~/claude-project-memory/prototype-driven-planning-skill/
+├── README.md                              # This file (read first)
+├── LEARNINGS.md                           # Distilled principles (read second)
+├── gemini_conversation.txt                # Raw Gemini consultation (historical)
+├── references/
+│   ├── architecture-rationale.md          # Why prototype-first, multi-model, tool selection
+│   └── stack-reference.md                 # Tool versions, configs, CLI flags, doc links
+└── trials/
+    ├── _SUMMARY.md                        # Scoreboard (read third)
+    ├── _INDEX.md                          # Structured tags per trial
+    └── T<NN>-<slug>.md                    # Individual trial records
 
-### Phase 4 — Task Decomposition
-Break the design doc into implementation tasks. PydanticAI will enforce a strict
-schema so each task is structured consistently for implementing models. Tasks
-reference the prototype for proven patterns but target a fresh production codebase.
+~/claude-devtools/skills/prototype-driven-planning/
+├── SKILL.md
+└── references/
+    ├── design-doc-template.md
+    ├── phase-1-discovery.md
+    ├── phase-2-prototype.md
+    └── phase-3-design-doc.md
 
-### Phase 5 — Multi-Model Implementation Pipeline
-LangGraph orchestrates the model cascade (local Qwen/Codestral via Aider → Gemini
-Flash fallback → Claude Opus final review). PydanticAI validates contracts between
-phases. Circuit breakers prevent infinite retry loops.
+~/claude-devtools/skills/prototype-driven-task-decomposition/
+├── SKILL.md
+├── scripts/
+│   └── task_schema.py          # PydanticAI schema (source of truth)
+└── references/
+    ├── analysis-guide.md        # Phase 1: reading design docs, numbered questions
+    ├── task-writing-guide.md    # Phase 2: TDD pairs, self-containment, sizing
+    └── output-format.md         # Phase 3: JSON/markdown output, recovery
+
+~/claude-devtools/commands/
+├── prototype-plan.md            # /prototype-plan slash command
+└── prototype-task-decompose.md  # /prototype-task-decompose slash command
+```
