@@ -38,9 +38,8 @@ Load on-demand only when needed:
 ### Built and Validated
 
 **prototype-driven-planning** — 3 phases (Discovery → Tracer Bullet → Design Doc)
-with mandatory pauses. Produces `docs/design/<feature>.md` and
-`prototypes/<feature>/`. Design doc template includes a Tooling section with
-lint, auto-fix, test, bootstrap, and service root fields.
+with mandatory pauses. Design doc template includes Tooling section with lint,
+auto-fix, test, bootstrap, and service root fields.
 
 **prototype-driven-task-decomposition** — 3 phases (Analysis → Task Generation →
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
@@ -49,46 +48,43 @@ pairing enforced by PydanticAI schema validators.
 ### Updated — Implementation Skill (2026-04-02)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
-configurable coding agent executors. Major architecture change: **multi-executor
-support** replacing the Aider-only model.
+configurable coding agent executors.
 
-#### Key Concepts
+#### Key Architecture
 
 **Executors** are coding agent CLIs (Aider, Claude CLI, Gemini CLI). Each is a
-named entry in `config.EXECUTORS` with a `type` field that drives dispatch:
-- `type: "aider"` — model-agnostic, named after its model (e.g., `aider-local-qwen`)
-- `type: "claude"` — uses Pro plan auth, no API key. Optional `model` field.
-- `type: "gemini"` — uses Google account or GEMINI_API_KEY. Optional `model` field.
+named entry in `config.EXECUTORS` with a `type` field that drives dispatch.
 
 **Executor Roles** map task roles (test/implementation/scaffold) to ordered
-escalation chains of executor names. Position 0 is the default; subsequent
-positions are escalation tiers.
+escalation chains of executor names.
 
-#### Current features:
-1. **`EXECUTORS` + `EXECUTOR_ROLES` config** — executors defined once with type
-   and type-specific params; roles map to ordered executor name lists.
-2. **Multi-executor dispatch** — `agent_bridge.py` dispatches to aider, claude
-   CLI, or gemini CLI based on executor type. Each type has its own command
-   construction and prompt delivery.
-3. **Lint auto-fix** as a post-executor step in `verify_task`.
-4. **Executor escalation** — `escalate_executor` node bumps tier, resets retries.
-5. **Phase 1 executor detection** — checks which CLIs are installed and
-   authenticated, proposes role assignments for user confirmation.
-6. **Prompt composition** — dependency file inlining, import conventions,
-   test-task guidance against `NotImplementedError` stubs.
-7. **Enum serialization fix** — `model_dump(mode="json")` in load_tasks to
-   prevent TaskType enum objects from breaking EXECUTOR_ROLES lookups.
-8. **Fail-fast startup validation** — verifies all active executors' CLIs are
-   on PATH and auth is configured before any tasks run.
+#### Latest change (2026-04-02, late session):
 
-#### Files (implementation skill):
-- `SKILL.md` — multi-executor throughout
-- `references/phase-1-analysis.md` — executor detection, role confirmation
-- `references/phase-2-generation.md` — EXECUTORS/EXECUTOR_ROLES config, enum fix
-- `references/langgraph-patterns.md` — escalate_executor node, updated routing
-- `references/executor-integration.md` — (renamed from aider-integration.md)
-  multi-executor dispatch, per-type command construction, prompt composition
-- `references/phase-3-handoff.md` — unchanged
+**Phase 1 now researches CLI docs at runtime** instead of relying on hardcoded
+command patterns. When detecting Claude/Gemini CLIs:
+
+1. Step 1: Check which CLIs are on PATH
+2. Step 2: **Search the web for the CLI's official headless/non-interactive
+   documentation** to determine correct flags for: non-interactive mode, prompt
+   delivery (stdin vs argument), tool permissions in headless mode, model
+   selection, turn limits, subprocess compatibility
+3. Step 3: Run a test prompt using the researched pattern to verify it works
+4. Step 4: Record the verified pattern — Phase 2 uses it to generate
+   `agent_bridge.py` with correct, proven commands
+
+This replaces hardcoded CLI flag patterns in `executor-integration.md` which
+went stale when the Claude CLI's `--allowedTools` semantics turned out to be
+different from what was documented (it auto-approves tools, not restricts
+available tools — causing subprocess hangs in headless mode).
+
+#### All features:
+1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
+2. Multi-executor dispatch via `agent_bridge.py`
+3. Lint auto-fix as a post-executor step in `verify_task`
+4. Executor escalation via `escalate_executor` node
+5. Phase 1 live CLI research + test prompt verification
+6. Prompt composition with dependency inlining and test-task guidance
+7. Enum serialization fix (`model_dump(mode="json")`)
 
 ---
 
@@ -97,45 +93,35 @@ positions are escalation tiers.
 ### Run 1 (2026-03-31) — Single-tier Aider + Qwen
 
 27 tasks, all attempted. 20/31 invocations hit reflection exhaustion.
-Dominant failure: I001/F401 lint loops. Code quality mixed — schemas excellent,
-cross-file interface drift (self.since_ms bug), many test stubs instead of
-real assertions. See LEARNINGS.md for detailed analysis.
+Dominant failure: I001/F401 lint loops. See LEARNINGS.md for analysis.
 
-### Run 2 (2026-04-01) — Aider + Gemini Flash (with model roles)
+### Run 2 (2026-04-01) — Aider + Gemini Flash (model roles, no CLI research)
 
-18 tasks (improved decomposition). Pipeline stalled at task-02 after 4 attempts.
-Root causes:
-1. **Empty stubs** — scaffold task (19 files) too large for single Gemini Flash
-   invocation via Aider. All plugin files created as 0 bytes.
-2. **Enum serialization** — `model_dump()` without `mode="json"` produced
-   `TaskType.TEST` enum objects instead of `"test"` strings, breaking
-   `MODEL_ROLES` key lookup.
-3. **Single-tier test role** — `MODEL_ROLES["test"]` had only `["gemini-flash"]`,
-   so no escalation was possible when it failed.
+18 tasks. Stalled at task-02 (4 attempts). Causes: empty stubs from oversized
+scaffold task, enum serialization bug, single-tier test role. Positive: test
+file had real assertions (model roles concept validated).
 
-**Positive finding:** Test file produced by Gemini Flash (`test_drive_downloader.py`)
-contained real assertions with proper mock setups — not `NotImplementedError`
-stubs. The model roles concept works for test quality.
+### Run 3 (2026-04-02) — Claude CLI as scaffold/test executor (pre-research fix)
 
-### Fixes Applied (2026-04-02)
+Pipeline hung on task-01 (scaffold via claude CLI). Cause: hardcoded
+`--allowedTools "Read,Write,Edit,Bash"` was wrong — `--allowedTools` in Claude
+CLI auto-approves listed tools but doesn't prevent Claude from trying to use
+other tools that then hang waiting for approval in headless mode. The correct
+flags need to be determined by researching the CLI's official docs.
 
-- Enum fix: `model_dump(mode="json")` documented in phase-2-generation.md
-- Multi-executor: `EXECUTORS`/`EXECUTOR_ROLES` replaces `MODELS`/`MODEL_ROLES`
-- Claude CLI and Gemini CLI as first-class executors (not just Aider backends)
-- Renamed `aider_bridge.py` → `agent_bridge.py`, `aider-integration.md` →
-  `executor-integration.md`
+**Fix:** Updated skill to research CLI docs during Phase 1 executor detection
+rather than relying on hardcoded patterns. Next run will regenerate the pipeline
+with researched, verified invocation commands.
 
 ---
 
 ## Next Steps
 
-- **Re-run full workflow** with multi-executor config (e.g., claude for scaffold
-  + test, aider-local-qwen for implementation, claude for escalation)
-- **Test scaffold with Claude CLI** — the large scaffold task (19 files) that
-  failed with Aider+Gemini may succeed with `claude -p` which has built-in
-  file creation tools
-- **Validate executor escalation** — confirm that when aider-local-qwen fails,
-  the pipeline escalates to claude and succeeds
+- **Regenerate pipeline** using updated skill (with Phase 1 CLI research)
+- **Validate end-to-end**: planning → decomposition → implementation pipeline
+  generation → pipeline execution with claude as scaffold/test executor
+- Test scaffold with Claude CLI using researched invocation pattern
+- Validate executor escalation (aider-local-qwen → claude)
 
 ---
 
@@ -143,16 +129,17 @@ stubs. The model roles concept works for test quality.
 
 ### Planning Skill
 - Session `f75b5f43-fd52-4138-87ad-c7c18589fa07` — First test run
-- Session `a7c48f00-b614-4086-a640-b623a00f5a97` — Second test run (added E2E validation)
+- Session `a7c48f00-b614-4086-a640-b623a00f5a97` — Second test run
 
 ### Decomposition Skill
-- Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks, pre-TDD)
-- Session `b2354707-0024-45db-bb9a-7ff872e39271` — Second run (11 tasks, interface deps fixed)
-- Session `64052f92-5393-4425-8286-1389124c6feb` — Third run (27 tasks, full TDD pairing)
+- Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks)
+- Session `b2354707-0024-45db-bb9a-7ff872e39271` — Second run (11 tasks)
+- Session `64052f92-5393-4425-8286-1389124c6feb` — Third run (27 tasks)
 
 ### Implementation Skill
-- **2026-03-31**: Run 1 (27 tasks, single-tier Aider+Qwen). All attempted, reflection exhaustion dominant.
-- **2026-04-01**: Run 2 (18 tasks, Aider+Gemini Flash with model roles). Stalled at task-02. Enum bug + empty stubs.
+- **2026-03-31**: Run 1 — 27 tasks, Aider+Qwen. Reflection exhaustion dominant.
+- **2026-04-01**: Run 2 — 18 tasks, Aider+Gemini Flash. Enum bug + empty stubs.
+- **2026-04-02**: Run 3 — Claude CLI as executor. Hung on task-01 (wrong CLI flags).
 
 ---
 
@@ -164,12 +151,12 @@ stubs. The model roles concept works for test quality.
 ├── LEARNINGS.md                           # Distilled principles (read second)
 ├── gemini_conversation.txt                # Raw Gemini consultation (historical)
 ├── references/
-│   ├── architecture-rationale.md          # Why prototype-first, multi-model, tool selection
-│   └── stack-reference.md                 # Tool versions, configs, CLI flags, doc links
+│   ├── architecture-rationale.md
+│   └── stack-reference.md
 └── trials/
     ├── _SUMMARY.md                        # Scoreboard (read third)
-    ├── _INDEX.md                          # Structured tags per trial
-    └── T<NN>-<slug>.md                    # Individual trial records
+    ├── _INDEX.md
+    └── T<NN>-<slug>.md
 
 ~/claude-devtools/skills/prototype-driven-planning/
 ├── SKILL.md
@@ -182,19 +169,19 @@ stubs. The model roles concept works for test quality.
 ~/claude-devtools/skills/prototype-driven-task-decomposition/
 ├── SKILL.md
 ├── scripts/
-│   └── task_schema.py          # PydanticAI schema (source of truth)
+│   └── task_schema.py
 └── references/
     ├── analysis-guide.md
     ├── task-writing-guide.md
     └── output-format.md
 
 ~/claude-devtools/skills/prototype-driven-implementation/
-├── SKILL.md                     # Updated 2026-04-02: multi-executor
+├── SKILL.md                     # Multi-executor, research-based
 └── references/
-    ├── phase-1-analysis.md      # Updated 2026-04-02: executor detection
-    ├── phase-2-generation.md    # Updated 2026-04-02: EXECUTORS/EXECUTOR_ROLES, enum fix
-    ├── langgraph-patterns.md    # Updated 2026-04-02: escalate_executor node
-    ├── executor-integration.md  # Updated 2026-04-02: (renamed from aider-integration.md)
+    ├── phase-1-analysis.md      # Updated: live CLI research + test prompt
+    ├── phase-2-generation.md    # EXECUTORS/EXECUTOR_ROLES, enum fix
+    ├── langgraph-patterns.md    # escalate_executor node
+    ├── executor-integration.md  # Research-driven patterns (no hardcoded flags)
     └── phase-3-handoff.md
 
 ~/claude-devtools/commands/
