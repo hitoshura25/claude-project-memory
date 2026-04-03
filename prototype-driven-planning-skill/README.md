@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-02)
+## Current State (2026-04-03, late)
 
 ### Built and Validated
 
@@ -45,37 +45,41 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-02)
+### Updated — Implementation Skill (2026-04-03, late)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
 
-#### Key Architecture
+#### Run 4 Results (2026-04-03)
 
-**Executors** are coding agent CLIs (Aider, Claude CLI, Gemini CLI). Each is a
-named entry in `config.EXECUTORS` with a `type` field that drives dispatch.
+18 tasks, run ~2.5 hours. Claude CLI rate limit hit at ~12:18 (after ~1 hour).
+Pipeline correctly marked rate-limited tasks as failed and continued.
 
-**Executor Roles** map task roles (test/implementation/scaffold) to ordered
-escalation chains of executor names.
+Key outcomes:
+- All 6 plugin modules fully implemented (not stubs)
+- All 7 test files exist with substantive tests
+- DAG complete with watermarking, error handling, cleanup
+- Qwen 3 Coder succeeded on simple tasks (avro_writer, watermark_store)
+- Qwen 3 Coder timed out on complex tasks (parser: 270 lines, 6 parsers)
+- Gemini rescued task-03 (drive_downloader) and task-11 (minio_uploader)
+- Claude rescued task-05 (parser) before rate limit
+- Tasks 16-18 never reached due to task-15 exhausting all executors
 
-#### Latest change (2026-04-02, late session):
+#### Skill Changes from Run 4 Analysis
 
-**Phase 1 now researches CLI docs at runtime** instead of relying on hardcoded
-command patterns. When detecting Claude/Gemini CLIs:
+1. **Phase 1 Step 1b**: Research Aider model settings for detected local models.
+   Qwen 3 Coder ran with temperature 0 and no thinking mode, causing 3
+   degenerate repetition loops (27K tokens of repeated text). Phase 1 now
+   researches thinking mode, temperature, and edit format for each model.
 
-1. Step 1: Check which CLIs are on PATH
-2. Step 2: **Search the web for the CLI's official headless/non-interactive
-   documentation** to determine correct flags for: non-interactive mode, prompt
-   delivery (stdin vs argument), tool permissions in headless mode, model
-   selection, turn limits, subprocess compatibility
-3. Step 3: Run a test prompt using the researched pattern to verify it works
-4. Step 4: Record the verified pattern — Phase 2 uses it to generate
-   `agent_bridge.py` with correct, proven commands
+2. **Aider test file inclusion**: Implementation tasks now include the
+   corresponding test file in Aider's `--file` list. Previously Aider couldn't
+   read test expectations and repeatedly said "test file not found."
 
-This replaces hardcoded CLI flag patterns in `executor-integration.md` which
-went stale when the Claude CLI's `--allowedTools` semantics turned out to be
-different from what was documented (it auto-approves tools, not restricts
-available tools — causing subprocess hangs in headless mode).
+3. **Task sizing rules (decomposition skill)**: Replaced simple file-count
+   heuristics with complexity-aware limits: max ~100-120 lines per file,
+   max 3 functions with independent logic, split by function group when
+   prototype file exceeds 150 lines.
 
 #### All features:
 1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
@@ -83,8 +87,11 @@ available tools — causing subprocess hangs in headless mode).
 3. Lint auto-fix as a post-executor step in `verify_task`
 4. Executor escalation via `escalate_executor` node
 5. Phase 1 live CLI research + test prompt verification
-6. Prompt composition with dependency inlining and test-task guidance
-7. Enum serialization fix (`model_dump(mode="json")`)
+6. Phase 1 Step 1b: Aider model settings research for local models
+7. Prompt composition with dependency inlining and test-task guidance
+8. Enum serialization fix (`model_dump(mode="json")`)
+9. Aider test file inclusion for implementation tasks
+10. `AIDER_MODEL_EXTRA_ARGS` per-model config
 
 ---
 
@@ -113,15 +120,43 @@ flags need to be determined by researching the CLI's official docs.
 rather than relying on hardcoded patterns. Next run will regenerate the pipeline
 with researched, verified invocation commands.
 
+### Run 4 (2026-04-03) — Full escalation: Aider+Qwen → Gemini → Claude
+
+18 tasks, ~2.5 hours. Best run yet — all implementation code produced.
+
+**Results:** All 6 plugin modules implemented, all 7 test files written, DAG
+complete. Tasks 16-18 (Dockerfile, Docker Compose, integration tests) not
+reached. Claude CLI rate limit hit after ~1 hour.
+
+**Executor performance:**
+- Aider+Qwen: Succeeded on small tasks (avro_writer, watermark_store), timed
+  out on complex ones (parser). 3 degenerate repetition loops (27K tokens).
+- Gemini: Rescued drive_downloader and minio_uploader. Hit 429 capacity errors
+  but internal retry handled them. Produced working code.
+- Claude: Rescued parser. Rate limited after ~5 tasks.
+
+**Root causes identified:**
+1. Qwen 3 Coder running without thinking mode (temperature 0, no reasoning
+   config) caused repetition loops
+2. Aider couldn't read test files (not in --file list), so implementation
+   attempts were blind to test expectations
+3. Parser task too complex for local models (270 lines, 6 parsers in 1 file)
+
+**Fixes applied:** Step 1b model research, test file inclusion, task sizing rules.
+
 ---
 
 ## Next Steps
 
-- **Regenerate pipeline** using updated skill (with Phase 1 CLI research)
-- **Validate end-to-end**: planning → decomposition → implementation pipeline
-  generation → pipeline execution with claude as scaffold/test executor
-- Test scaffold with Claude CLI using researched invocation pattern
-- Validate executor escalation (aider-local-qwen → claude)
+- **Re-run decomposition** with updated task sizing rules to split the parser
+  task, then regenerate the pipeline with updated skill
+- **Validate Step 1b**: Ensure Aider model research produces correct thinking
+  mode / temperature settings for Qwen 3 Coder
+- **Validate test file inclusion**: Confirm Aider reads test files and produces
+  better implementations on first attempt
+- **Complete tasks 16-18**: Dockerfile, Docker Compose, integration tests
+- Test full end-to-end: planning → decomposition → implementation with all
+  three skill improvements applied
 
 ---
 
@@ -140,6 +175,8 @@ with researched, verified invocation commands.
 - **2026-03-31**: Run 1 — 27 tasks, Aider+Qwen. Reflection exhaustion dominant.
 - **2026-04-01**: Run 2 — 18 tasks, Aider+Gemini Flash. Enum bug + empty stubs.
 - **2026-04-02**: Run 3 — Claude CLI as executor. Hung on task-01 (wrong CLI flags).
+- **2026-04-03**: Run 4 — 18 tasks, Aider+Qwen/Gemini/Claude. All impl code produced.
+  Claude rate limited after ~1hr. 3 Qwen repetition loops. Tasks 16-18 not reached.
 
 ---
 

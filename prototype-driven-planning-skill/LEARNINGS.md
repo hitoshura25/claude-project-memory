@@ -47,6 +47,27 @@
 - **Aider scripting flags**: `--yes-always`, `--no-git`, `--no-check-update`,
   `--no-show-model-warnings`. Prototype references inlined into `--message-file`
   (not `--read` flags).
+- **Local thinking models need explicit config via Aider**: Qwen 3 Coder 30B
+  running with Aider's defaults (temperature 0, no thinking config) produces
+  degenerate repetition loops — 27K tokens of repeated text. Phase 1 must
+  research and verify Aider settings (thinking mode, temperature, edit format)
+  for each detected local model before generating the pipeline.
+- **Aider needs test files in --file for implementation tasks**: Without the
+  test file in `--file`, Aider can only run tests via `--auto-test` and see
+  pass/fail output but cannot read the test code. This causes Aider to say
+  "test file not found" and produce blind implementations. Include the
+  corresponding test file so Aider understands what assertions to satisfy.
+- **Task complexity is about lines and functions, not file count**: A single
+  file with 270 lines and 6 independent parser functions is too complex for
+  a ~30B local model. Split by function group when prototype code exceeds
+  150 lines. The decomposition skill's sizing rules must count prototype
+  lines, not just task file count.
+- **Pipeline handles rate limits correctly via existing retry/verify flow**:
+  When an executor returns non-zero (rate limit, capacity error, etc.), the
+  verify_task node's independent lint/test checks catch the unchanged code.
+  The retry/escalation/mark-failed flow handles it without needing output
+  string matching. The executor stays available for later tasks in case
+  the limit resets.
 
 ## From Prior Skill Set (49 Trials)
 
