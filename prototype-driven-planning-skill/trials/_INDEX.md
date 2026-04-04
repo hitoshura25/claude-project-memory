@@ -9,6 +9,7 @@
 | T02 | implementation | Gemini Flash | ❌ Stalled | `scaffold-bug`, `aider-scripting` | load_tasks, scaffold prompt | Enum serialization bug + oversized scaffold (19 files) | Yes — model_dump(mode="json"), multi-executor design |
 | T03 | implementation | Claude CLI | ❌ Hung | `aider-scripting`, `cwd-selection` | agent_bridge (Claude CLI) | Hardcoded --allowedTools auto-approves not restricts; headless hang | Yes — Phase 1 runtime CLI research |
 | T04 | implementation | Qwen+Gemini+Claude | ⚠️ Best | `circuit-breaker`, `context-exhaustion` | escalate_executor, parser task | Qwen repetition loops (no thinking mode); parser too complex; Claude rate limited | Yes — Step 1b model research, test file inclusion, task sizing rules |
+| T05 | implementation | Claude CLI | ❌ Stalled | `tdd-violation`, `scaffold-bug` | verify_task, test task stubs | verify_task rejected valid test task; ModuleNotFoundError treated as collection error; no stubs existed for module under test | Yes — stub field in schema, stub-in-test-task design, verify_task rewrite |
 
 ---
 
@@ -32,3 +33,4 @@
 | `rate-limit` | Cloud executor hit usage rate limit |
 | `enum-serialization` | Pydantic enum not serialized to string |
 | `task-sizing` | Task too complex for target model capacity |
+| `stub-gap` | Test task imports module with no stub; causes ImportError instead of NotImplementedError |

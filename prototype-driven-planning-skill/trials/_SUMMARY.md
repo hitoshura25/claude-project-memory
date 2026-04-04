@@ -8,6 +8,7 @@
 | T02 | 2026-04-01 | implementation | Aider+Gemini Flash | ❌ Stalled | Stalled at task-02; enum bug + oversized scaffold + no escalation |
 | T03 | 2026-04-02 | implementation | Claude CLI + Aider+Qwen | ❌ Hung | Hung on task-01; wrong `--allowedTools` semantics |
 | T04 | 2026-04-03 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ Best run | 15/18 tasks reached, all impl code produced; Claude rate limited |
+| T05 | 2026-04-04 | implementation | Claude CLI | ❌ Stalled | Stalled at task-02; verify_task rejected valid test task (missing stubs) |
 
 ---
 
@@ -16,6 +17,7 @@
 T01 → T02: Introduced model roles (validated test quality). Exposed enum bug and scaffold sizing.
 T02 → T03: Introduced Claude CLI as executor. Exposed hardcoded flag assumptions.
 T03 → T04: Runtime CLI research, multi-executor escalation. First run to produce all implementation code.
+T04 → T05: Re-decomposed with task sizing. Exposed TDD stub gap in verify_task. Led to stub-in-test-task design.
 
 ---
 
@@ -35,4 +37,4 @@ T03 → T04: Runtime CLI research, multi-executor escalation. First run to produ
 |-------|--------|----------------|
 | prototype-driven-planning | ✅ Built | 2026-03-28 (2 test runs) |
 | prototype-driven-task-decomposition | ✅ Built | 2026-03-28 (3 test runs) |
-| prototype-driven-implementation | 🔄 In progress | T04 (2026-04-03) |
+| prototype-driven-implementation | 🔄 In progress | T05 (2026-04-04) |

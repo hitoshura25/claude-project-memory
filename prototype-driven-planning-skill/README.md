@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-03, late)
+## Current State (2026-04-04)
 
 ### Built and Validated
 
@@ -45,41 +45,41 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-03, late)
+### Updated — Implementation Skill (2026-04-04)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
 
-#### Run 4 Results (2026-04-03)
+#### Run 5 Results (2026-04-04)
 
-18 tasks, run ~2.5 hours. Claude CLI rate limit hit at ~12:18 (after ~1 hour).
-Pipeline correctly marked rate-limited tasks as failed and continued.
+21 tasks (re-decomposed with updated task sizing). Stalled at task-02 after 4
+attempts. Claude CLI produced empty output on all retries. Root cause: test
+task imports module under test (`from config.settings import Settings`), but
+the module doesn’t exist yet — `verify_task` treated the `ModuleNotFoundError`
+as a collection error instead of recognizing it as expected TDD behavior.
 
-Key outcomes:
-- All 6 plugin modules fully implemented (not stubs)
-- All 7 test files exist with substantive tests
-- DAG complete with watermarking, error handling, cleanup
-- Qwen 3 Coder succeeded on simple tasks (avro_writer, watermark_store)
-- Qwen 3 Coder timed out on complex tasks (parser: 270 lines, 6 parsers)
-- Gemini rescued task-03 (drive_downloader) and task-11 (minio_uploader)
-- Claude rescued task-05 (parser) before rate limit
-- Tasks 16-18 never reached due to task-15 exhausting all executors
+#### Skill Changes from Run 5 Analysis
 
-#### Skill Changes from Run 4 Analysis
+1. **Stub files in test tasks (decomposition + implementation skills)**:
+   Test tasks now create stub files alongside test files. Stubs define the
+   public interface with `NotImplementedError` bodies so tests can import
+   and run against them. The `stub: true` field on `FileChange` marks stub
+   files. Implementation tasks use `operation: modify` to replace stubs.
 
-1. **Phase 1 Step 1b**: Research Aider model settings for detected local models.
-   Qwen 3 Coder ran with temperature 0 and no thinking mode, causing 3
-   degenerate repetition loops (27K tokens of repeated text). Phase 1 now
-   researches thinking mode, temperature, and edit format for each model.
+2. **Schema validators for stub correctness (decomposition skill)**:
+   - `validate_stub_on_test_tasks_only`: only test tasks may create stubs
+   - `validate_stub_to_modify`: implementation tasks must use `modify`
+     (not `create`) for files that were stubbed
 
-2. **Aider test file inclusion**: Implementation tasks now include the
-   corresponding test file in Aider's `--file` list. Previously Aider couldn't
-   read test expectations and repeatedly said "test file not found."
+3. **Updated verify_task logic (implementation skill)**:
+   For test tasks: `NotImplementedError` in output → pass (stubs working);
+   collection error → fail (stub missing); all tests pass → fail (stub has
+   real logic). This replaces the previous heuristic that treated any
+   `ImportError` as a collection error.
 
-3. **Task sizing rules (decomposition skill)**: Replaced simple file-count
-   heuristics with complexity-aware limits: max ~100-120 lines per file,
-   max 3 functions with independent logic, split by function group when
-   prototype file exceeds 150 lines.
+4. **Stub writing rules in prompt composition (implementation skill)**:
+   Test task prompts include explicit stub-writing constraints: interface only,
+   `NotImplementedError` bodies, no logic, no helpers, no docstrings.
 
 #### All features:
 1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
@@ -92,6 +92,10 @@ Key outcomes:
 8. Enum serialization fix (`model_dump(mode="json")`)
 9. Aider test file inclusion for implementation tasks
 10. `AIDER_MODEL_EXTRA_ARGS` per-model config
+11. Stub files in test tasks with `stub: true` schema field
+12. `validate_stub_on_test_tasks_only` and `validate_stub_to_modify` validators
+13. verify_task test-task logic: NotImplementedError = pass, collection error = fail
+14. Stub writing rules in test-task prompt composition
 
 ---
 
@@ -148,15 +152,19 @@ reached. Claude CLI rate limit hit after ~1 hour.
 
 ## Next Steps
 
-- **Re-run decomposition** with updated task sizing rules to split the parser
-  task, then regenerate the pipeline with updated skill
+- **Re-run decomposition** with stub-aware task schema: test tasks create
+  stubs, implementation tasks use `operation: modify` for stubbed files
+- **Regenerate pipeline** with updated verify_task logic and stub-writing
+  prompt rules
+- **Validate stub workflow end-to-end**: test task creates stub + tests,
+  tests fail with NotImplementedError, implementation task replaces stubs,
+  tests pass
 - **Validate Step 1b**: Ensure Aider model research produces correct thinking
   mode / temperature settings for Qwen 3 Coder
 - **Validate test file inclusion**: Confirm Aider reads test files and produces
   better implementations on first attempt
-- **Complete tasks 16-18**: Dockerfile, Docker Compose, integration tests
 - Test full end-to-end: planning → decomposition → implementation with all
-  three skill improvements applied
+  skill improvements applied
 
 ---
 
@@ -177,6 +185,9 @@ reached. Claude CLI rate limit hit after ~1 hour.
 - **2026-04-02**: Run 3 — Claude CLI as executor. Hung on task-01 (wrong CLI flags).
 - **2026-04-03**: Run 4 — 18 tasks, Aider+Qwen/Gemini/Claude. All impl code produced.
   Claude rate limited after ~1hr. 3 Qwen repetition loops. Tasks 16-18 not reached.
+- **2026-04-04**: Run 5 — 21 tasks (re-decomposed). Stalled at task-02.
+  verify_task rejected valid test task due to ModuleNotFoundError from missing
+  stub. Led to stub-in-test-task design across both skills.
 
 ---
 

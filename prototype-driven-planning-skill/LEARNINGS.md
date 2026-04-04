@@ -30,9 +30,13 @@
   caught a task with tests but no test-task dependency during a live run.
 - **`uv run --with <package>` over venv activation**: venv activation doesn't
   persist in Claude Code; `uv run` is reliable.
-- **Scaffold stubs enable proper TDD**: Stubs with `NotImplementedError`
-  (not missing files) let test tasks import and write tests that fail for
-  the right reason.
+- **Scaffold stubs enable proper TDD**: Test tasks create stub files alongside
+  test files. Stubs define the public interface with `NotImplementedError`
+  bodies so tests can import and run against them. The `stub: true` field in
+  the task schema marks these files. Implementation tasks use
+  `operation: modify` to replace stub bodies with real logic. Schema validators
+  enforce: only test tasks may create stubs; implementation tasks must use
+  `modify` (not `create`) for stubbed files.
 - **Security goes on implementation tasks, not test tasks**.
 
 ## From Implementation Skill (In Progress)
