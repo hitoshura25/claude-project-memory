@@ -72,6 +72,24 @@
   The retry/escalation/mark-failed flow handles it without needing output
   string matching. The executor stays available for later tasks in case
   the limit resets.
+- **Single source of truth for implementing models**: Task docs must be
+  self-contained. When prototype code and task description conflict, models
+  follow the code because working code is a stronger signal than prose
+  instructions. The fix is to remove prototype references from the pipeline
+  entirely and embed adapted patterns directly in task descriptions during
+  decomposition.
+- **Output field contracts prevent cross-task drift**: When task A produces
+  data that task B consumes via a schema, both tasks must specify exact field
+  names in their descriptions. The decomposing model must reconcile source
+  names (e.g., database column `heart_rate_variability_millis`) with output
+  names (e.g., Avro field `rmssd_ms`) at decomposition time, not leave it to
+  the implementing model.
+- **Tasks without test gates can hide broken code**: If a task only has a
+  lint gate (no tests), syntactically valid but functionally broken code
+  passes the pipeline. Integration test tasks are especially vulnerable —
+  they may reference function signatures from modules not in their
+  `depends_on` chain and get them all wrong. Consider adding import-level
+  checks or requiring interface dependencies for all cross-module references.
 
 ## From Prior Skill Set (49 Trials)
 

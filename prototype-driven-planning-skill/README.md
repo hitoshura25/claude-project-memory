@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-04)
+## Current State (2026-04-06)
 
 ### Built and Validated
 
@@ -45,41 +45,55 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-04)
+### Updated — Implementation Skill (2026-04-06)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
 
-#### Run 5 Results (2026-04-04)
+#### Run 6 Results (2026-04-05)
 
-21 tasks (re-decomposed with updated task sizing). Stalled at task-02 after 4
-attempts. Claude CLI produced empty output on all retries. Root cause: test
-task imports module under test (`from config.settings import Settings`), but
-the module doesn’t exist yet — `verify_task` treated the `ModuleNotFoundError`
-as a collection error instead of recognizing it as expected TDD behavior.
+21 tasks, all passed. First clean 21/21 run. Executors: Aider+Qwen (local,
+/no_think, temperature 0.7) → Gemini → Claude escalation chain. Duration ~2h 19m.
 
-#### Skill Changes from Run 5 Analysis
+task-17 needed 2 retries (rabbitmq publisher), task-02 needed 1 retry. All
+others passed first attempt. Qwen had one repetition loop (task-09, 24K tokens)
+but pipeline recovered via escalation.
 
-1. **Stub files in test tasks (decomposition + implementation skills)**:
-   Test tasks now create stub files alongside test files. Stubs define the
-   public interface with `NotImplementedError` bodies so tests can import
-   and run against them. The `stub: true` field on `FileChange` marks stub
-   files. Implementation tasks use `operation: modify` to replace stubs.
+**Post-run code quality issues found:**
+- HRV field name mismatch (parser → schema): prototype used
+  `heart_rate_variability_millis`, Avro schema uses `rmssd_ms`
+- drive_downloader uses `logging` instead of `structlog` (copied from prototype)
+- test_integration.py has wrong function signatures (no interface deps)
+- messages.py has empty deduplication fields
+- sleep schema missing duration_ms
 
-2. **Schema validators for stub correctness (decomposition skill)**:
-   - `validate_stub_on_test_tasks_only`: only test tasks may create stubs
-   - `validate_stub_to_modify`: implementation tasks must use `modify`
-     (not `create`) for files that were stubbed
+**Root cause:** Split authority between prototype code and task description.
+Models follow working code over prose instructions. Led to removing
+`prototype_references` from the pipeline entirely.
 
-3. **Updated verify_task logic (implementation skill)**:
-   For test tasks: `NotImplementedError` in output → pass (stubs working);
-   collection error → fail (stub missing); all tests pass → fail (stub has
-   real logic). This replaces the previous heuristic that treated any
-   `ImportError` as a collection error.
+#### Skill Changes from Run 6 Analysis
 
-4. **Stub writing rules in prompt composition (implementation skill)**:
-   Test task prompts include explicit stub-writing constraints: interface only,
-   `NotImplementedError` bodies, no logic, no helpers, no docstrings.
+1. **Removed prototype references (decomposition + implementation skills)**:
+   The `prototype_references` field, `PrototypeReference` class, and
+   `prototype_path` field were removed from the task schema. The pipeline no
+   longer reads prototype files — task descriptions are the sole source of
+   truth for implementing models.
+
+2. **Inline patterns replace prototype references (decomposition skill)**:
+   Task-writing-guide now instructs the decomposing model to copy adapted
+   code snippets directly into task descriptions with correct field names,
+   imports, and conventions already applied.
+
+3. **Output field contracts (decomposition skill)**:
+   When a task produces structured data that another task consumes, both
+   tasks must specify exact field names. The decomposing model reconciles
+   source names with output names at decomposition time.
+
+4. **Implementation skill input simplification**:
+   Removed prototype directory and design doc from pipeline inputs. Pipeline
+   reads only tasks.json, task_schema.py, and project config files.
+   `PROTOTYPE_DIR` removed from generated config.py template.
+   Reference Code block removed from prompt template.
 
 #### All features:
 1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
@@ -96,6 +110,9 @@ as a collection error instead of recognizing it as expected TDD behavior.
 12. `validate_stub_on_test_tasks_only` and `validate_stub_to_modify` validators
 13. verify_task test-task logic: NotImplementedError = pass, collection error = fail
 14. Stub writing rules in test-task prompt composition
+15. Prototype references removed — task descriptions are sole source of truth
+16. Inline patterns and output field contracts in decomposition skill
+17. Implementation pipeline no longer reads prototype directory or design doc
 
 ---
 
@@ -148,23 +165,42 @@ reached. Claude CLI rate limit hit after ~1 hour.
 
 **Fixes applied:** Step 1b model research, test file inclusion, task sizing rules.
 
+### Run 5 (2026-04-04) — Re-decomposed with task sizing
+
+21 tasks (re-decomposed with updated task sizing). Stalled at task-02 after 4
+attempts. Claude CLI produced empty output on all retries. Root cause: test
+task imports module under test (`from config.settings import Settings`), but
+the module doesn't exist yet — `verify_task` treated the `ModuleNotFoundError`
+as a collection error instead of recognizing it as expected TDD behavior.
+
+**Fix:** Stub-in-test-task design across both decomposition and implementation
+skills. Test tasks now create stub files alongside test files.
+
+### Run 6 (2026-04-05) — First clean run: Aider+Qwen → Gemini → Claude
+
+21 tasks, ~2h 19m. First clean 21/21 run. Qwen improved significantly with
+`/no_think` + `temperature: 0.7`. One repetition loop (task-09) recovered via
+escalation. Post-run manual review found field name mismatches, wrong function
+signatures in integration tests, and prototype-over-prose copying. Led to
+`prototype_references` removal from the pipeline.
+
 ---
 
 ## Next Steps
 
-- **Re-run decomposition** with stub-aware task schema: test tasks create
-  stubs, implementation tasks use `operation: modify` for stubbed files
-- **Regenerate pipeline** with updated verify_task logic and stub-writing
-  prompt rules
-- **Validate stub workflow end-to-end**: test task creates stub + tests,
-  tests fail with NotImplementedError, implementation task replaces stubs,
-  tests pass
-- **Validate Step 1b**: Ensure Aider model research produces correct thinking
-  mode / temperature settings for Qwen 3 Coder
-- **Validate test file inclusion**: Confirm Aider reads test files and produces
-  better implementations on first attempt
-- Test full end-to-end: planning → decomposition → implementation with all
-  skill improvements applied
+- **Re-decompose** with updated task-writing-guide (inline patterns + output
+  field contracts instead of prototype references)
+- **Regenerate pipeline** from updated implementation skill (no prototype
+  references in prompt template)
+- **T07 run** to validate that self-contained task descriptions eliminate
+  the field name drift and signature mismatch issues from T06
+- **Fix `_log_path` threading bug** so per-executor logs are captured in
+  the run log file (currently unverifiable from artifacts)
+- **Explore import-level checks** for tasks without test gates (e.g.,
+  integration test tasks that only have lint gates)
+- **Explore reducing `EXECUTOR_TIMEOUT`** at the skill level so generated
+  `config.py` defaults to 300s (Qwen completes within ~90s; 600s only
+  enables failing retry loops)
 
 ---
 
@@ -188,6 +224,9 @@ reached. Claude CLI rate limit hit after ~1 hour.
 - **2026-04-04**: Run 5 — 21 tasks (re-decomposed). Stalled at task-02.
   verify_task rejected valid test task due to ModuleNotFoundError from missing
   stub. Led to stub-in-test-task design across both skills.
+- **2026-04-05**: Run 6 — 21 tasks, Aider+Qwen/Gemini/Claude. First clean
+  21/21 run. Post-run review found field name drift, wrong signatures, and
+  prototype-over-prose copying. Led to prototype_references removal.
 
 ---
 
