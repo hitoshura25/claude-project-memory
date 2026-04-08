@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-06)
+## Current State (2026-04-07)
 
 ### Built and Validated
 
@@ -45,55 +45,38 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-06)
+### Updated — Implementation Skill (2026-04-07)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
 
-#### Run 6 Results (2026-04-05)
+#### Run 7 Results (2026-04-07)
 
-21 tasks, all passed. First clean 21/21 run. Executors: Aider+Qwen (local,
-/no_think, temperature 0.7) → Gemini → Claude escalation chain. Duration ~2h 19m.
+31 tasks (re-decomposed with inline patterns + output field contracts). Run
+completed but with multiple failed tasks due to Aider+Qwen reflection
+exhaustion on I001 lint errors and Gemini 429 rate limits.
 
-task-17 needed 2 retries (rabbitmq publisher), task-02 needed 1 retry. All
-others passed first attempt. Qwen had one repetition loop (task-09, 24K tokens)
-but pipeline recovered via escalation.
+**What improved from T06:**
+- Field name drift fixed: HRV parser outputs `rmssd_ms` matching Avro schema
+- structlog used everywhere (no stdlib `logging` in generated code)
+- Parser-schema alignment correct across all six record types
+- Code quality of individual modules is good
 
-**Post-run code quality issues found:**
-- HRV field name mismatch (parser → schema): prototype used
-  `heart_rate_variability_millis`, Avro schema uses `rmssd_ms`
-- drive_downloader uses `logging` instead of `structlog` (copied from prototype)
-- test_integration.py has wrong function signatures (no interface deps)
-- messages.py has empty deduplication fields
-- sleep schema missing duration_ms
+**What failed:**
+1. Aider+Qwen burned all reflections on I001 lint errors (every implementation task)
+2. Gemini 429 rate limits blocked tier1 escalation for tasks 3, 27, 29
+3. DAG references wrong Settings field names (cross-file drift)
+4. Integration tests have completely wrong function signatures (T06 repeat)
+5. Run log empty due to print() vs logging mismatch
+6. Junk files leaked into service directory from executor output
 
-**Root cause:** Split authority between prototype code and task description.
-Models follow working code over prose instructions. Led to removing
-`prototype_references` from the pipeline entirely.
-
-#### Skill Changes from Run 6 Analysis
-
-1. **Removed prototype references (decomposition + implementation skills)**:
-   The `prototype_references` field, `PrototypeReference` class, and
-   `prototype_path` field were removed from the task schema. The pipeline no
-   longer reads prototype files — task descriptions are the sole source of
-   truth for implementing models.
-
-2. **Inline patterns replace prototype references (decomposition skill)**:
-   Task-writing-guide now instructs the decomposing model to copy adapted
-   code snippets directly into task descriptions with correct field names,
-   imports, and conventions already applied.
-
-3. **Output field contracts (decomposition skill)**:
-   When a task produces structured data that another task consumes, both
-   tasks must specify exact field names. The decomposing model reconciles
-   source names with output names at decomposition time.
-
-4. **Implementation skill input simplification**:
-   Removed prototype directory and design doc from pipeline inputs. Pipeline
-   reads only tasks.json, task_schema.py, and project config files.
-   `PROTOTYPE_DIR` removed from generated config.py template.
-   Reference Code block removed from prompt template.
+**Skill fixes applied (2026-04-07):**
+1. Added `AIDER_LINT_CMD` config — composite command that auto-fixes before
+   checking (`fix && check`), so Aider's reflection budget isn't wasted on
+   trivially fixable I001/F401 errors
+2. Added `TeeWriter` stdout capture to `run.py` template so all `print()`
+   output from graph nodes is captured in the run log file
+3. Reduced `EXECUTOR_TIMEOUT` default from 600s to 300s
 
 #### All features:
 1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
@@ -113,6 +96,14 @@ Models follow working code over prose instructions. Led to removing
 15. Prototype references removed — task descriptions are sole source of truth
 16. Inline patterns and output field contracts in decomposition skill
 17. Implementation pipeline no longer reads prototype directory or design doc
+18. `AIDER_LINT_CMD` — auto-fix before check in Aider's `--lint-cmd`
+19. `TeeWriter` stdout capture in `run.py` for run log completeness
+20. `EXECUTOR_TIMEOUT` default reduced from 600s to 300s
+21. Integration test Docker lifecycle in test commands (compose up/test/down)
+22. Docker availability validation at startup when integration tests present
+23. Scaffold task creates `services.compose.yml` for dependency services
+24. Integration test task descriptions require exact function signatures
+25. Orchestrator/wiring tasks must depend on scaffold if they import config/settings
 
 ---
 
@@ -184,23 +175,28 @@ escalation. Post-run manual review found field name mismatches, wrong function
 signatures in integration tests, and prototype-over-prose copying. Led to
 `prototype_references` removal from the pipeline.
 
+### Run 7 (2026-04-07) — Re-decomposed with inline patterns
+
+31 tasks (re-decomposed). Field name drift and structlog issues from T06 are
+fixed. But Aider+Qwen hit I001 lint loops on every implementation task
+(reflection exhaustion), Gemini 429 blocked escalation for tasks 3, 27, 29.
+DAG has cross-file field name drift (wrong Settings attributes). Integration
+tests still have wrong function signatures. Run log empty (stdout not captured).
+
+**Fixes applied:** AIDER_LINT_CMD (auto-fix before check), TeeWriter stdout
+capture, EXECUTOR_TIMEOUT reduced to 300s.
+
 ---
 
 ## Next Steps
 
-- **Re-decompose** with updated task-writing-guide (inline patterns + output
-  field contracts instead of prototype references)
-- **Regenerate pipeline** from updated implementation skill (no prototype
-  references in prompt template)
-- **T07 run** to validate that self-contained task descriptions eliminate
-  the field name drift and signature mismatch issues from T06
-- **Fix `_log_path` threading bug** so per-executor logs are captured in
-  the run log file (currently unverifiable from artifacts)
-- **Explore import-level checks** for tasks without test gates (e.g.,
-  integration test tasks that only have lint gates)
-- **Explore reducing `EXECUTOR_TIMEOUT`** at the skill level so generated
-  `config.py` defaults to 300s (Qwen completes within ~90s; 600s only
-  enables failing retry loops)
+- **Regenerate pipeline** with updated skill (AIDER_LINT_CMD, TeeWriter, 300s
+  timeout, Docker integration test lifecycle) and re-run as T08
+- **Explore Gemini 429 mitigation**: Consider adding a delay between
+  escalation attempts, or using Gemini API key auth instead of CLI OAuth
+- **Investigate junk files**: Executor output leaking into filesystem as
+  file creations (Claude CLI creating files from its own conversational
+  output)
 
 ---
 
@@ -227,6 +223,9 @@ signatures in integration tests, and prototype-over-prose copying. Led to
 - **2026-04-05**: Run 6 — 21 tasks, Aider+Qwen/Gemini/Claude. First clean
   21/21 run. Post-run review found field name drift, wrong signatures, and
   prototype-over-prose copying. Led to prototype_references removal.
+- **2026-04-07**: Run 7 — 31 tasks (re-decomposed). I001 lint loops on all
+  Aider+Qwen tasks, Gemini 429 on escalation. Field drift and structlog fixed.
+  Led to AIDER_LINT_CMD, TeeWriter, 300s timeout.
 
 ---
 

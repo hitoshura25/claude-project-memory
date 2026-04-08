@@ -90,6 +90,37 @@
   they may reference function signatures from modules not in their
   `depends_on` chain and get them all wrong. Consider adding import-level
   checks or requiring interface dependencies for all cross-module references.
+- **Aider's lint command must auto-fix before reporting**: Aider's
+  `--auto-lint` flag runs the lint command after each edit and gives the
+  model a reflection turn to fix any errors found. Trivially auto-fixable
+  issues like I001 (import sorting) and F401 (unused imports) waste the
+  model's limited reflection budget when the linter itself could fix them.
+  The lint command passed to `--lint-cmd` should be a composite that
+  auto-fixes first, then checks: `"<fix-cmd> && <check-cmd>"`. The
+  pipeline's `verify_task` node still runs its own independent lint check
+  as the authoritative gate.
+- **Stdout tee is required for run logs**: Graph nodes use `print()` for
+  progress output. Python's `logging.basicConfig` with a file handler
+  captures nothing from `print()`. The fix is to wrap `sys.stdout` with a
+  tee writer in `run.py` that writes to both console and the log file.
+  Do not rewrite all nodes to use `logging.info()` — that's invasive.
+- **Integration tests are just another TDD pair with Docker lifecycle**:
+  Integration test tasks follow the same test/implementation pattern as unit
+  tests. The only difference is that the test command wraps `docker compose
+  up/down` around `pytest`. The services compose file belongs in the scaffold
+  task (it's project infrastructure). The integration test task description
+  must include exact function signatures for every module under test — without
+  them, the model guesses arities and produces syntactically valid but
+  functionally broken tests. No special schema fields or pipeline metadata
+  are needed; the service lifecycle is entirely in the test command.
+- **Orchestrator tasks must depend on every task they import from**: The
+  implementation pipeline inlines dependency source code into the prompt,
+  but only for direct dependencies. If a DAG/wiring task imports `Settings`
+  from the scaffold task but doesn't list the scaffold in `depends_on`, the
+  model never sees the Settings class and guesses field names. This caused
+  the DAG cross-file drift in T07: `settings.datalake_access_key` instead of
+  `settings.datalake_minio_access_key`. Every `from X import Y` in the
+  task's code must trace back to a task in `depends_on`.
 
 ## From Prior Skill Set (49 Trials)
 
