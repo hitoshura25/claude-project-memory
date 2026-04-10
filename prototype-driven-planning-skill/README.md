@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-07)
+## Current State (2026-04-09)
 
 ### Built and Validated
 
@@ -45,38 +45,50 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-07)
+### Updated — Implementation Skill (2026-04-09)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
 
-#### Run 7 Results (2026-04-07)
+#### Run 8 Results (2026-04-09)
 
-31 tasks (re-decomposed with inline patterns + output field contracts). Run
-completed but with multiple failed tasks due to Aider+Qwen reflection
-exhaustion on I001 lint errors and Gemini 429 rate limits.
+22 tasks, ~6.9 hours (too long). 19/22 passed, 1 failed (task-20 DAG wiring),
+2 skipped. First run with AIDER_LINT_CMD (auto-fix), TeeWriter, and 300s
+timeout applied (though timeout was actually 600s due to config drift — see
+fixes below).
 
-**What improved from T06:**
-- Field name drift fixed: HRV parser outputs `rmssd_ms` matching Avro schema
-- structlog used everywhere (no stdlib `logging` in generated code)
-- Parser-schema alignment correct across all six record types
-- Code quality of individual modules is good
+**Key metrics:**
+- Productive work: 22 minutes (5% of runtime)
+- Failed retries: 5.6 hours (81%) — dominated by 600s timeouts
+- 27 attempts hit 600s timeout, only 4 of those passed
+- 12/20 tasks passed on first attempt; 7 needed escalation
+- Aider+Qwen: won 2/9 implementation tasks (simplest ones only)
+- Gemini: won 12 tasks, but noisy (lint failures, stubs-pass errors)
+- Claude: won 5 hardest tasks, 83% success rate
 
-**What failed:**
-1. Aider+Qwen burned all reflections on I001 lint errors (every implementation task)
-2. Gemini 429 rate limits blocked tier1 escalation for tasks 3, 27, 29
-3. DAG references wrong Settings field names (cross-file drift)
-4. Integration tests have completely wrong function signatures (T06 repeat)
-5. Run log empty due to print() vs logging mismatch
-6. Junk files leaked into service directory from executor output
+**Root causes of wasted time:**
+1. EXECUTOR_TIMEOUT was 600s in generated pipeline despite skill template
+   saying 300s — caused by hardcoded `timeout=600` in langgraph-patterns.md
+   example code contradicting the config template
+2. MAX_RETRIES_PER_TASK=3 meant 4 attempts per tier before escalation —
+   Aider+Qwen never benefits from retries on tasks it can't solve
+3. No code formatter in auto-fix chain — E501 (line too long) caused 5/14
+   lint failures that ruff format would fix mechanically
+4. Gemini writes `pytest.raises(NotImplementedError)` in test tasks —
+   tests pass against stubs, defeating TDD
 
-**Skill fixes applied (2026-04-07):**
-1. Added `AIDER_LINT_CMD` config — composite command that auto-fixes before
-   checking (`fix && check`), so Aider's reflection budget isn't wasted on
-   trivially fixable I001/F401 errors
-2. Added `TeeWriter` stdout capture to `run.py` template so all `print()`
-   output from graph nodes is captured in the run log file
-3. Reduced `EXECUTOR_TIMEOUT` default from 600s to 300s
+**Skill fixes applied (2026-04-09):**
+1. `MAX_RETRIES_PER_TASK` reduced from 3 to 1 (all sources updated)
+2. Eliminated config value duplication — `phase-2-generation.md` is now the
+   single source of truth for all config defaults; other files reference
+   `config.*` symbolically, never repeat literal values
+3. `DEFAULT_FORMAT_CMD` added to config template — Phase 1 now detects
+   project formatter; verify_task runs formatter after lint fix, before
+   lint check; AIDER_LINT_CMD becomes "fix && format && check"
+4. Test writing rules updated — explicit prohibition on
+   `pytest.raises(NotImplementedError)` and language-agnostic equivalents;
+   explains WHY this defeats TDD (test would pass against stub)
+5. Formatter detection added to Phase 1 analysis guidance with ecosystem table
 
 #### All features:
 1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
@@ -186,17 +198,33 @@ tests still have wrong function signatures. Run log empty (stdout not captured).
 **Fixes applied:** AIDER_LINT_CMD (auto-fix before check), TeeWriter stdout
 capture, EXECUTOR_TIMEOUT reduced to 300s.
 
+### Run 8 (2026-04-09) — Auto-fix + TeeWriter + 300s timeout
+
+22 tasks, ~6.9 hours. 19/22 passed, 1 failed (task-20), 2 skipped. I001 lint
+loops resolved by AIDER_LINT_CMD. TeeWriter captured full log. But timeout
+was still 600s due to config drift (literal in example code overrode template).
+Aider+Qwen won only 2/9 impl tasks; Claude rescued 5 hardest. Gemini had
+5 stubs-pass failures (wrote pytest.raises(NotImplementedError)) and 5 E501
+lint failures (no formatter in auto-fix chain).
+
+**Fixes applied:** MAX_RETRIES=1, single source of truth for config values,
+DEFAULT_FORMAT_CMD (ruff format in auto-fix chain), test writing rules
+updated to prohibit asserting on stub placeholder errors.
+
 ---
 
 ## Next Steps
 
-- **Regenerate pipeline** with updated skill (AIDER_LINT_CMD, TeeWriter, 300s
-  timeout, Docker integration test lifecycle) and re-run as T08
-- **Explore Gemini 429 mitigation**: Consider adding a delay between
-  escalation attempts, or using Gemini API key auth instead of CLI OAuth
-- **Investigate junk files**: Executor output leaking into filesystem as
-  file creations (Claude CLI creating files from its own conversational
-  output)
+- **Run T09** with updated config (MAX_RETRIES=1, EXECUTOR_TIMEOUT=300,
+  DEFAULT_FORMAT_CMD, updated test writing rules) and measure improvement
+- **Task-20 (DAG wiring)**: Still the hardest task — exhausted all tiers in
+  T08. May need decomposition into smaller pieces (e.g., separate
+  _download_zip wiring from _parse_records wiring)
+- **Gemini 429 mitigation**: Gemini hit 429 rate limits on 20+ attempts.
+  Consider adding backoff delay between Gemini retries, or switching to
+  API key auth instead of CLI OAuth
+- **Aider+Qwen value**: Won only 2/9 impl tasks. Consider whether it's
+  worth keeping as tier-0 for implementation, or promoting Gemini to tier-0
 
 ---
 

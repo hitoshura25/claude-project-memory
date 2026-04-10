@@ -122,6 +122,26 @@
   `settings.datalake_minio_access_key`. Every `from X import Y` in the
   task's code must trace back to a task in `depends_on`.
 
+### Task Sizing
+
+- **Use code quality thresholds for decomposition.** Cyclomatic
+  complexity > 5, cognitive complexity > 10, fan-out > 5, parameter count > 4
+  — adapted from SonarQube/CodeClimate with stricter limits to keep tasks
+  within reach of smaller coding agents.
+- **Single source of truth for config values.** When skill reference files
+  repeat the same value in example code and prose, the generating model
+  picks one arbitrarily. Use symbolic references in example code, never
+  repeat literals.
+- **Auto-fix chain must include the formatter.** Linter auto-fix handles
+  import sorting and unused vars but not line length. Without the formatter
+  in the chain, line-length errors waste retries on a mechanically fixable
+  issue.
+- **Test writing rules must prohibit asserting on stub errors.** Saying
+  "tests should fail with NotImplementedError" is ambiguous — models write
+  `pytest.raises(NotImplementedError)`, which passes against the stub. The
+  rule must explicitly prohibit catching or asserting on the stub's
+  placeholder error.
+
 ## From Prior Skill Set (49 Trials)
 
 - LLM non-determinism makes "Big Design Up Front" a losing strategy.
