@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-09)
+## Current State (2026-04-14)
 
 ### Built and Validated
 
@@ -45,50 +45,60 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-09)
+### Updated — Implementation Skill (2026-04-14)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
 
-#### Run 8 Results (2026-04-09)
+#### Run 9 Results (2026-04-13)
 
-22 tasks, ~6.9 hours (too long). 19/22 passed, 1 failed (task-20 DAG wiring),
-2 skipped. First run with AIDER_LINT_CMD (auto-fix), TeeWriter, and 300s
-timeout applied (though timeout was actually 600s due to config drift — see
-fixes below).
+17 tasks (re-decomposed), ~1h 47m. 8 passed, 4 degraded (lint fail/test pass),
+1 failed (task-13 rabbitmq test), 1 skipped, 3 not_run.
 
-**Key metrics:**
-- Productive work: 22 minutes (5% of runtime)
-- Failed retries: 5.6 hours (81%) — dominated by 600s timeouts
-- 27 attempts hit 600s timeout, only 4 of those passed
-- 12/20 tasks passed on first attempt; 7 needed escalation
-- Aider+Qwen: won 2/9 implementation tasks (simplest ones only)
-- Gemini: won 12 tasks, but noisy (lint failures, stubs-pass errors)
-- Claude: won 5 hardest tasks, 83% success rate
+**Improvements from T08:**
+- Runtime dropped from 6.9h to 1.8h (MAX_RETRIES=1 working)
+- No I001 lint loops (AIDER_LINT_CMD fix held)
+- No Gemini 429 rate limits this run
+- TeeWriter captured full log
+- 12/13 reached tasks succeeded (92% reach-success rate)
 
-**Root causes of wasted time:**
-1. EXECUTOR_TIMEOUT was 600s in generated pipeline despite skill template
-   saying 300s — caused by hardcoded `timeout=600` in langgraph-patterns.md
-   example code contradicting the config template
-2. MAX_RETRIES_PER_TASK=3 meant 4 attempts per tier before escalation —
-   Aider+Qwen never benefits from retries on tasks it can't solve
-3. No code formatter in auto-fix chain — E501 (line too long) caused 5/14
-   lint failures that ruff format would fix mechanically
-4. Gemini writes `pytest.raises(NotImplementedError)` in test tasks —
-   tests pass against stubs, defeating TDD
+**Issues identified:**
+1. `EXECUTOR_TIMEOUT` still 600s despite skill template saying 300s — Claude
+   Code retained the value from a previous pipeline's `config.py` via memory
+2. `ruff` not in service `pyproject.toml` dev dependencies — scaffold task
+   didn't include it, causing "Failed to spawn: ruff" on early tasks. Self-
+   healed mid-run when Gemini coincidentally ran `uv sync`
+3. Task-13 (rabbitmq publisher test) failed all tiers — test patches
+   `plugins.rabbitmq_publisher.pika.BlockingConnection` but the stub doesn't
+   import `pika`, so `patch()` fails at fixture setup
+4. E501 on long string literals (SQL, docstrings) caused 4 degraded tasks —
+   `ruff format` doesn't break string contents
 
-**Skill fixes applied (2026-04-09):**
-1. `MAX_RETRIES_PER_TASK` reduced from 3 to 1 (all sources updated)
-2. Eliminated config value duplication — `phase-2-generation.md` is now the
-   single source of truth for all config defaults; other files reference
-   `config.*` symbolically, never repeat literal values
-3. `DEFAULT_FORMAT_CMD` added to config template — Phase 1 now detects
-   project formatter; verify_task runs formatter after lint fix, before
-   lint check; AIDER_LINT_CMD becomes "fix && format && check"
-4. Test writing rules updated — explicit prohibition on
-   `pytest.raises(NotImplementedError)` and language-agnostic equivalents;
-   explains WHY this defeats TDD (test would pass against stub)
-5. Formatter detection added to Phase 1 analysis guidance with ecosystem table
+#### Templating Refactor (2026-04-14)
+
+Major skill change: pipeline files are now split into **templates** (copied
+verbatim) and **generated** (project-specific). This eliminates the
+non-determinism of Claude Code regenerating stable files from memory or
+reference docs, which caused the timeout drift issue.
+
+**Templates (11 files, copied verbatim):**
+- `run.py`, `pipeline_state.py`, `graph.py`, `agent_bridge.py`, `requirements.txt`
+- `nodes/__init__.py`, `nodes/load_tasks.py`, `nodes/execute_task.py`,
+  `nodes/verify_task.py`, `nodes/bootstrap.py`, `nodes/report.py`
+- `config.py.template` (with `{{PLACEHOLDER}}` markers)
+
+**Generated (3 files, per-project):**
+- `config.py` — from template, filling placeholders only
+- `nodes/compose_prompt.py` — project-specific prompt composition
+- `README.md` — project-specific instructions
+
+**Key improvements baked into templates:**
+- `EXECUTOR_TIMEOUT = 300` and `MAX_RETRIES_PER_TASK = 1` are hardcoded
+  literals that Claude Code cannot override from memory
+- `bootstrap.py` verifies lint/test tools after `uv sync` and auto-installs
+  if missing (ruff safety net)
+- All reference docs updated to point to templates instead of containing
+  inline code that could be regenerated with drift
 
 #### All features:
 1. `EXECUTORS` + `EXECUTOR_ROLES` config with type-based dispatch
@@ -116,6 +126,9 @@ fixes below).
 23. Scaffold task creates `services.compose.yml` for dependency services
 24. Integration test task descriptions require exact function signatures
 25. Orchestrator/wiring tasks must depend on scaffold if they import config/settings
+26. **Pipeline templates** — 11 stable files copied verbatim, 3 generated
+27. **Bootstrap lint tool verification** — auto-installs missing tools post-bootstrap
+28. **Config template with placeholders** — prevents value drift from model memory
 
 ---
 
@@ -135,96 +148,56 @@ file had real assertions (model roles concept validated).
 ### Run 3 (2026-04-02) — Claude CLI as scaffold/test executor (pre-research fix)
 
 Pipeline hung on task-01 (scaffold via claude CLI). Cause: hardcoded
-`--allowedTools "Read,Write,Edit,Bash"` was wrong — `--allowedTools` in Claude
-CLI auto-approves listed tools but doesn't prevent Claude from trying to use
-other tools that then hang waiting for approval in headless mode. The correct
-flags need to be determined by researching the CLI's official docs.
-
-**Fix:** Updated skill to research CLI docs during Phase 1 executor detection
-rather than relying on hardcoded patterns. Next run will regenerate the pipeline
-with researched, verified invocation commands.
+`--allowedTools "Read,Write,Edit,Bash"` was wrong.
 
 ### Run 4 (2026-04-03) — Full escalation: Aider+Qwen → Gemini → Claude
 
 18 tasks, ~2.5 hours. Best run yet — all implementation code produced.
-
-**Results:** All 6 plugin modules implemented, all 7 test files written, DAG
-complete. Tasks 16-18 (Dockerfile, Docker Compose, integration tests) not
-reached. Claude CLI rate limit hit after ~1 hour.
-
-**Executor performance:**
-- Aider+Qwen: Succeeded on small tasks (avro_writer, watermark_store), timed
-  out on complex ones (parser). 3 degenerate repetition loops (27K tokens).
-- Gemini: Rescued drive_downloader and minio_uploader. Hit 429 capacity errors
-  but internal retry handled them. Produced working code.
-- Claude: Rescued parser. Rate limited after ~5 tasks.
-
-**Root causes identified:**
-1. Qwen 3 Coder running without thinking mode (temperature 0, no reasoning
-   config) caused repetition loops
-2. Aider couldn't read test files (not in --file list), so implementation
-   attempts were blind to test expectations
-3. Parser task too complex for local models (270 lines, 6 parsers in 1 file)
-
-**Fixes applied:** Step 1b model research, test file inclusion, task sizing rules.
+Claude rate limited after ~1 hour. 3 Qwen repetition loops.
 
 ### Run 5 (2026-04-04) — Re-decomposed with task sizing
 
-21 tasks (re-decomposed with updated task sizing). Stalled at task-02 after 4
-attempts. Claude CLI produced empty output on all retries. Root cause: test
-task imports module under test (`from config.settings import Settings`), but
-the module doesn't exist yet — `verify_task` treated the `ModuleNotFoundError`
-as a collection error instead of recognizing it as expected TDD behavior.
-
-**Fix:** Stub-in-test-task design across both decomposition and implementation
-skills. Test tasks now create stub files alongside test files.
+21 tasks. Stalled at task-02 after 4 attempts. verify_task rejected valid test
+task due to ModuleNotFoundError from missing stub.
 
 ### Run 6 (2026-04-05) — First clean run: Aider+Qwen → Gemini → Claude
 
-21 tasks, ~2h 19m. First clean 21/21 run. Qwen improved significantly with
-`/no_think` + `temperature: 0.7`. One repetition loop (task-09) recovered via
-escalation. Post-run manual review found field name mismatches, wrong function
-signatures in integration tests, and prototype-over-prose copying. Led to
-`prototype_references` removal from the pipeline.
+21 tasks, ~2h 19m. First clean 21/21 run. Post-run review found field name
+drift, wrong signatures, and prototype-over-prose copying.
 
 ### Run 7 (2026-04-07) — Re-decomposed with inline patterns
 
-31 tasks (re-decomposed). Field name drift and structlog issues from T06 are
-fixed. But Aider+Qwen hit I001 lint loops on every implementation task
-(reflection exhaustion), Gemini 429 blocked escalation for tasks 3, 27, 29.
-DAG has cross-file field name drift (wrong Settings attributes). Integration
-tests still have wrong function signatures. Run log empty (stdout not captured).
-
-**Fixes applied:** AIDER_LINT_CMD (auto-fix before check), TeeWriter stdout
-capture, EXECUTOR_TIMEOUT reduced to 300s.
+31 tasks. I001 lint loops on all Aider+Qwen tasks, Gemini 429 on escalation.
+Led to AIDER_LINT_CMD, TeeWriter, 300s timeout.
 
 ### Run 8 (2026-04-09) — Auto-fix + TeeWriter + 300s timeout
 
-22 tasks, ~6.9 hours. 19/22 passed, 1 failed (task-20), 2 skipped. I001 lint
-loops resolved by AIDER_LINT_CMD. TeeWriter captured full log. But timeout
-was still 600s due to config drift (literal in example code overrode template).
-Aider+Qwen won only 2/9 impl tasks; Claude rescued 5 hardest. Gemini had
-5 stubs-pass failures (wrote pytest.raises(NotImplementedError)) and 5 E501
-lint failures (no formatter in auto-fix chain).
+22 tasks, ~6.9 hours. 19/22 passed, 1 failed (task-20), 2 skipped. Timeout
+was still 600s due to config drift.
 
-**Fixes applied:** MAX_RETRIES=1, single source of truth for config values,
-DEFAULT_FORMAT_CMD (ruff format in auto-fix chain), test writing rules
-updated to prohibit asserting on stub placeholder errors.
+### Run 9 (2026-04-13) — Re-decomposed (17 tasks)
+
+17 tasks, ~1h 47m. 8 passed, 4 degraded, 1 failed (task-13), 1 skipped,
+3 not_run. Timeout still 600s (memory contamination). ruff not in dev deps.
+Task-13 failed: stub missing pika import for test patching.
 
 ---
 
 ## Next Steps
 
-- **Run T09** with updated config (MAX_RETRIES=1, EXECUTOR_TIMEOUT=300,
-  DEFAULT_FORMAT_CMD, updated test writing rules) and measure improvement
-- **Task-20 (DAG wiring)**: Still the hardest task — exhausted all tiers in
-  T08. May need decomposition into smaller pieces (e.g., separate
-  _download_zip wiring from _parse_records wiring)
-- **Gemini 429 mitigation**: Gemini hit 429 rate limits on 20+ attempts.
-  Consider adding backoff delay between Gemini retries, or switching to
-  API key auth instead of CLI OAuth
-- **Aider+Qwen value**: Won only 2/9 impl tasks. Consider whether it's
-  worth keeping as tier-0 for implementation, or promoting Gemini to tier-0
+- **Run T10** with templated pipeline — validates that templates copy
+  correctly, timeout is 300s, and bootstrap lint verification works
+- **Discuss scaffolding ownership**: Should Claude Code execute the scaffold
+  step during Phase 2 (before handoff) to validate the entire tooling chain?
+  The old `implementation-planning` skill did this. Would enable Phase 3 to
+  actually run verify_task against real files
+- **Task-13 fix**: Stub files must import external dependencies that tests
+  will `patch()` against the module. Needs discussion on where this belongs
+  (decomposition task description vs test-task prompt rules)
+- **E501 on string literals**: Decide whether to ignore E501 globally or
+  raise the lint line-length limit for generated projects
+- **Aider+Qwen value**: Won 1/6 implementation tasks in T09. Consider
+  promoting Gemini to tier-0 for implementation
 
 ---
 
@@ -242,18 +215,13 @@ updated to prohibit asserting on stub placeholder errors.
 ### Implementation Skill
 - **2026-03-31**: Run 1 — 27 tasks, Aider+Qwen. Reflection exhaustion dominant.
 - **2026-04-01**: Run 2 — 18 tasks, Aider+Gemini Flash. Enum bug + empty stubs.
-- **2026-04-02**: Run 3 — Claude CLI as executor. Hung on task-01 (wrong CLI flags).
-- **2026-04-03**: Run 4 — 18 tasks, Aider+Qwen/Gemini/Claude. All impl code produced.
-  Claude rate limited after ~1hr. 3 Qwen repetition loops. Tasks 16-18 not reached.
-- **2026-04-04**: Run 5 — 21 tasks (re-decomposed). Stalled at task-02.
-  verify_task rejected valid test task due to ModuleNotFoundError from missing
-  stub. Led to stub-in-test-task design across both skills.
-- **2026-04-05**: Run 6 — 21 tasks, Aider+Qwen/Gemini/Claude. First clean
-  21/21 run. Post-run review found field name drift, wrong signatures, and
-  prototype-over-prose copying. Led to prototype_references removal.
-- **2026-04-07**: Run 7 — 31 tasks (re-decomposed). I001 lint loops on all
-  Aider+Qwen tasks, Gemini 429 on escalation. Field drift and structlog fixed.
-  Led to AIDER_LINT_CMD, TeeWriter, 300s timeout.
+- **2026-04-02**: Run 3 — Claude CLI as executor. Hung on task-01.
+- **2026-04-03**: Run 4 — 18 tasks, full escalation. All impl code produced.
+- **2026-04-04**: Run 5 — 21 tasks. Stalled at task-02 (missing stubs).
+- **2026-04-05**: Run 6 — 21 tasks. First clean 21/21 run.
+- **2026-04-07**: Run 7 — 31 tasks. I001 lint loops, Gemini 429s.
+- **2026-04-09**: Run 8 — 22 tasks, 19/22 passed. Config drift (600s timeout).
+- **2026-04-13**: Run 9 — 17 tasks, 8+4 passed/degraded. ruff missing, task-13 failed.
 
 ---
 
@@ -290,13 +258,27 @@ updated to prohibit asserting on stub placeholder errors.
     └── output-format.md
 
 ~/claude-devtools/skills/prototype-driven-implementation/
-├── SKILL.md                     # Multi-executor, research-based
+├── SKILL.md                     # Updated: references templates/ directory
+├── templates/                   # NEW: verbatim pipeline files
+│   ├── run.py                   # Entry point with TeeWriter
+│   ├── pipeline_state.py        # LangGraph state TypedDicts
+│   ├── graph.py                 # StateGraph, routing, pick/retry/escalate nodes
+│   ├── agent_bridge.py          # Executor dispatch, subprocess wrappers
+│   ├── requirements.txt         # langgraph, pydantic
+│   ├── config.py.template       # Config with {{PLACEHOLDER}} markers
+│   └── nodes/
+│       ├── __init__.py
+│       ├── load_tasks.py        # Task loading, schema validation
+│       ├── execute_task.py      # Executor dispatch node
+│       ├── verify_task.py       # Auto-fix, lint, test verification
+│       ├── bootstrap.py         # Bootstrap + lint tool verification
+│       └── report.py            # Final summary
 └── references/
-    ├── phase-1-analysis.md      # Updated: live CLI research + test prompt
-    ├── phase-2-generation.md    # EXECUTORS/EXECUTOR_ROLES, enum fix
-    ├── langgraph-patterns.md    # escalate_executor node
-    ├── executor-integration.md  # Research-driven patterns (no hardcoded flags)
-    └── phase-3-handoff.md
+    ├── phase-1-analysis.md      # Executor detection, tooling, research
+    ├── phase-2-generation.md    # Updated: copy templates, generate 3 files
+    ├── langgraph-patterns.md    # Updated: design reference, points to templates
+    ├── executor-integration.md  # Updated: design reference, points to templates
+    └── phase-3-handoff.md       # Updated: template + config validation
 
 ~/claude-devtools/commands/
 ├── prototype-plan.md

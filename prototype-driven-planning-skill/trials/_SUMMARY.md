@@ -12,6 +12,7 @@
 | T06 | 2026-04-05 | implementation | Aider+Qwen → Gemini → Claude | ✅ First clean run | 21/21 passed; code quality issues found in post-run review |
 | T07 | 2026-04-07 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ Partial | 31 tasks; I001 lint loops, Gemini 429s, DAG field drift, integration test sigs wrong |
 | T08 | 2026-04-09 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ 19/22 | I001 fixed; 600s timeout drift; Gemini stubs-pass + E501; task-20 failed all tiers |
+| T09 | 2026-04-13 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ 12/17 | 8 passed + 4 degraded; ruff missing from dev deps; task-13 stub import bug; timeout still 600s |
 
 ---
 
@@ -23,6 +24,8 @@ T03 → T04: Runtime CLI research, multi-executor escalation. First run to produ
 T04 → T05: Re-decomposed with task sizing. Exposed TDD stub gap in verify_task. Led to stub-in-test-task design.
 T05 → T06: Stub workflow validated, /no_think + model settings applied, test file inclusion for Aider. First complete run. Post-run review revealed cross-task field name drift, leading to prototype_references removal.
 T06 → T07: Re-decomposed with inline patterns + output field contracts. Field drift fixed, structlog everywhere. But I001 lint loops returned as #1 failure mode (unchanged since T01). Led to AIDER_LINT_CMD (auto-fix before check), TeeWriter stdout capture, 300s timeout.
+T07 → T08: AIDER_LINT_CMD fixed I001 loops. TeeWriter captured full log. But timeout was still 600s due to config drift (hardcoded literal in example code). Led to config value deduplication.
+T08 → T09: MAX_RETRIES=1 cut runtime from 6.9h to 1.8h. But timeout still drifted to 600s (Claude Code memory contamination). ruff missing from dev deps caused early lint failures. Task-13 stub import bug. Led to pipeline templates refactor.
 
 ---
 
@@ -30,9 +33,9 @@ T06 → T07: Re-decomposed with inline patterns + output field contracts. Field 
 
 | Model | Strengths | Weaknesses |
 |-------|-----------|------------|
-| Qwen 3 Coder 30B | Small/simple tasks (avro_writer, watermark_store) | Complex tasks, repetition loops without thinking mode, can't fix I001/F401 |
-| Gemini Flash | Reliable rescue for mid-complexity tasks, handles 429 retries | Hit capacity limits under load |
-| Claude CLI | Handles most complex tasks (parser), high code quality | Pro plan rate limit (~1hr active use) |
+| Qwen 3 Coder 30B | Simplest tasks only (minio_uploader in T09) | Complex tasks, won 1/6 impl tasks in T09 |
+| Gemini Flash | Reliable for tests and mid-complexity impl tasks | E501 on string literals |
+| Claude CLI | Handles most complex tasks, high code quality | Pro plan rate limit (~1hr active use) |
 
 ---
 
@@ -42,4 +45,4 @@ T06 → T07: Re-decomposed with inline patterns + output field contracts. Field 
 |-------|--------|----------------|
 | prototype-driven-planning | ✅ Built | 2026-03-28 (2 test runs) |
 | prototype-driven-task-decomposition | ✅ Built | 2026-03-28 (3 test runs) |
-| prototype-driven-implementation | 🔄 In progress | T07 (2026-04-07) |
+| prototype-driven-implementation | 🔄 In progress | T09 (2026-04-13) |

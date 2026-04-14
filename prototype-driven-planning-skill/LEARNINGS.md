@@ -117,10 +117,9 @@
   implementation pipeline inlines dependency source code into the prompt,
   but only for direct dependencies. If a DAG/wiring task imports `Settings`
   from the scaffold task but doesn't list the scaffold in `depends_on`, the
-  model never sees the Settings class and guesses field names. This caused
-  the DAG cross-file drift in T07: `settings.datalake_access_key` instead of
-  `settings.datalake_minio_access_key`. Every `from X import Y` in the
-  task's code must trace back to a task in `depends_on`.
+  model never sees the Settings class and guesses field names. Every
+  `from X import Y` in the task's code must trace back to a task in
+  `depends_on`.
 
 ### Task Sizing
 
@@ -141,6 +140,32 @@
   `pytest.raises(NotImplementedError)`, which passes against the stub. The
   rule must explicitly prohibit catching or asserting on the stub's
   placeholder error.
+
+### Pipeline Architecture
+
+- **Template stable files, generate only what varies.** Pipeline files like
+  `graph.py`, `run.py`, `agent_bridge.py`, and all node files except
+  `compose_prompt.py` are identical across projects. Regenerating them from
+  memory or reference docs introduces value drift (e.g., EXECUTOR_TIMEOUT
+  reverting to 600s from a prior run). Ship these as verbatim templates that
+  are copied, not rewritten. Only `config.py`, `compose_prompt.py`, and
+  `README.md` are generated per-project.
+- **Config template with placeholders prevents drift.** When a model
+  generates `config.py` from scratch, it may inject values from previous
+  pipeline runs stored in its memory/context. A `config.py.template` with
+  `{{PLACEHOLDER}}` markers and hardcoded fixed values ensures critical
+  settings like timeouts and retry limits are always correct.
+- **Bootstrap must verify tool availability.** After `uv sync` or
+  equivalent, verify that lint and test tools are actually available. If
+  the scaffold task didn't include the linter in dev dependencies, bootstrap
+  should auto-install it rather than letting every subsequent task fail with
+  "Failed to spawn." The bootstrap node's `_verify_tool()` function handles
+  this as a safety net.
+- **Scaffold dev dependencies must include lint tools.** The design doc's
+  Tooling section specifies which linter to use, but this doesn't guarantee
+  the scaffold task's `pyproject.toml` includes it in dev dependencies.
+  Bootstrap verification catches this gap, but the decomposition should
+  also be explicit about it in the scaffold task description.
 
 ## From Prior Skill Set (49 Trials)
 
