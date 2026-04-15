@@ -155,17 +155,31 @@
   pipeline runs stored in its memory/context. A `config.py.template` with
   `{{PLACEHOLDER}}` markers and hardcoded fixed values ensures critical
   settings like timeouts and retry limits are always correct.
-- **Bootstrap must verify tool availability.** After `uv sync` or
-  equivalent, verify that lint and test tools are actually available. If
-  the scaffold task didn't include the linter in dev dependencies, bootstrap
-  should auto-install it rather than letting every subsequent task fail with
-  "Failed to spawn." The bootstrap node's `_verify_tool()` function handles
-  this as a safety net.
+- **Pipeline templates must be language-agnostic.** Template files
+  (verify_task, bootstrap, etc.) must not contain hardcoded language
+  patterns like `.py` extensions, `NotImplementedError`, or `uv add --dev`.
+  All platform-specific behaviour is driven by config fields:
+  `SOURCE_FILE_EXTENSIONS`, `STUB_ERROR_PATTERN`,
+  `TEST_COLLECTION_ERROR_PATTERNS`, `TEST_COLLECTED_PATTERNS`,
+  `SCAFFOLD_MARKER_FILE`, and `BOOTSTRAP_TOOL_CHECKS`.
+- **Bootstrap must verify tool availability.** After the bootstrap command
+  runs, verify that lint and test tools are actually available. The
+  `BOOTSTRAP_TOOL_CHECKS` config field provides (verify_cmd, install_cmd)
+  pairs that the bootstrap node runs in sequence. This is config-driven
+  and language-agnostic — no hardcoded tool names in the template.
 - **Scaffold dev dependencies must include lint tools.** The design doc's
   Tooling section specifies which linter to use, but this doesn't guarantee
-  the scaffold task's `pyproject.toml` includes it in dev dependencies.
-  Bootstrap verification catches this gap, but the decomposition should
+  the scaffold task's project config includes it in dev dependencies.
+  Bootstrap tool checks catch this gap, but the decomposition should
   also be explicit about it in the scaffold task description.
+- **Error context for retries must be file-based, not truncated.** Test
+  framework output includes headers, separator lines, and traceback
+  formatting that consume most of any fixed character budget before the
+  actual error message appears. Truncating to a fixed limit (e.g., 800
+  chars) can cut off the diagnostic message that would let the model fix
+  the issue. Instead, write full error output to a file and direct the
+  executor to read it. This gives the model complete diagnostic info
+  without inflating prompt size.
 
 ## From Prior Skill Set (49 Trials)
 

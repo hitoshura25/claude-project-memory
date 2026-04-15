@@ -95,8 +95,11 @@ reference docs, which caused the timeout drift issue.
 **Key improvements baked into templates:**
 - `EXECUTOR_TIMEOUT = 300` and `MAX_RETRIES_PER_TASK = 1` are hardcoded
   literals that Claude Code cannot override from memory
-- `bootstrap.py` verifies lint/test tools after `uv sync` and auto-installs
-  if missing (ruff safety net)
+- `bootstrap.py` verifies lint/test tools after bootstrap via config-driven
+  `BOOTSTRAP_TOOL_CHECKS` and auto-installs if missing
+- All template files are language-agnostic — platform-specific patterns
+  (file extensions, stub error strings, collection error markers, scaffold
+  marker files, tool checks) are driven by config fields
 - All reference docs updated to point to templates instead of containing
   inline code that could be regenerated with drift
 
@@ -113,7 +116,7 @@ reference docs, which caused the timeout drift issue.
 10. `AIDER_MODEL_EXTRA_ARGS` per-model config
 11. Stub files in test tasks with `stub: true` schema field
 12. `validate_stub_on_test_tasks_only` and `validate_stub_to_modify` validators
-13. verify_task test-task logic: NotImplementedError = pass, collection error = fail
+13. verify_task test-task logic: config-driven stub error pattern = pass, collection error = fail
 14. Stub writing rules in test-task prompt composition
 15. Prototype references removed — task descriptions are sole source of truth
 16. Inline patterns and output field contracts in decomposition skill
@@ -129,6 +132,9 @@ reference docs, which caused the timeout drift issue.
 26. **Pipeline templates** — 11 stable files copied verbatim, 3 generated
 27. **Bootstrap lint tool verification** — auto-installs missing tools post-bootstrap
 28. **Config template with placeholders** — prevents value drift from model memory
+29. **Language-agnostic templates** — all platform-specific patterns (file extensions,
+    stub error strings, collection error markers, scaffold marker files, tool checks)
+    driven by config fields, not hardcoded in template code
 
 ---
 
@@ -259,7 +265,7 @@ Task-13 failed: stub missing pika import for test patching.
 
 ~/claude-devtools/skills/prototype-driven-implementation/
 ├── SKILL.md                     # Updated: references templates/ directory
-├── templates/                   # NEW: verbatim pipeline files
+├── templates/                   # NEW: verbatim pipeline files (language-agnostic)
 │   ├── run.py                   # Entry point with TeeWriter
 │   ├── pipeline_state.py        # LangGraph state TypedDicts
 │   ├── graph.py                 # StateGraph, routing, pick/retry/escalate nodes
@@ -271,7 +277,7 @@ Task-13 failed: stub missing pika import for test patching.
 │       ├── load_tasks.py        # Task loading, schema validation
 │       ├── execute_task.py      # Executor dispatch node
 │       ├── verify_task.py       # Auto-fix, lint, test verification
-│       ├── bootstrap.py         # Bootstrap + lint tool verification
+│       ├── bootstrap.py         # Bootstrap + config-driven tool verification
 │       └── report.py            # Final summary
 └── references/
     ├── phase-1-analysis.md      # Executor detection, tooling, research
