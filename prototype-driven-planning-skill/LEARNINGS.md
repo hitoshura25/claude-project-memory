@@ -140,6 +140,15 @@
   `pytest.raises(NotImplementedError)`, which passes against the stub. The
   rule must explicitly prohibit catching or asserting on the stub's
   placeholder error.
+- **Long string literals must be named constants at file scope.** SQL
+  queries, API URLs, format strings, regex patterns, and long error messages
+  inlined in function bodies trigger line-length lint violations that code
+  formatters cannot fix (formatters don't break string contents). Small
+  models consistently write these as single-line literals, burn reflection
+  budget on formatting, and never fix the root cause. The prompt's coding
+  conventions section instructs models to extract long strings to named
+  constants at module/file scope. This is language-agnostic and prevents
+  the problem at the source.
 
 ### Pipeline Architecture
 
@@ -180,6 +189,10 @@
   the issue. Instead, write full error output to a file and direct the
   executor to read it. This gives the model complete diagnostic info
   without inflating prompt size.
+- **Structured log directory separates concerns.** Run logs, lint errors,
+  and test errors go to separate subdirectories under `logs/` (`runs/`,
+  `lint/`, `tests/`). This keeps diagnostics organized and makes error
+  files easy to reference in retry/escalation prompts.
 
 ## From Prior Skill Set (49 Trials)
 
