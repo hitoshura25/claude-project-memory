@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-14)
+## Current State (2026-04-15)
 
 ### Built and Validated
 
@@ -45,7 +45,7 @@ auto-fix, test, bootstrap, and service root fields.
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing enforced by PydanticAI schema validators.
 
-### Updated — Implementation Skill (2026-04-14)
+### Updated — Implementation Skill (2026-04-15)
 
 **prototype-driven-implementation** — LangGraph pipeline that executes tasks via
 configurable coding agent executors.
@@ -74,6 +74,30 @@ configurable coding agent executors.
 4. E501 on long string literals (SQL, docstrings) caused 4 degraded tasks —
    `ruff format` doesn't break string contents
 
+#### Post-T09 Skill Changes (2026-04-15)
+
+**Task-13 fix — stub mock-import rule (decomposition skill):**
+Added rule to `task-writing-guide.md`: stubs must import third-party
+dependencies that tests will mock at the module boundary. The decomposing
+model includes these imports in stub code even though the stub body doesn't
+use them. Framed cross-framework (Python patch, Java Mockito, TypeScript Jest).
+
+**Bootstrap merged into scaffold verification (implementation skill):**
+Eliminated the separate `bootstrap` node from the LangGraph graph. Bootstrap
+(dependency installation + tool verification) now runs as part of verify_task's
+scaffold logic. This means scaffold tasks are fully validated — marker file
+exists, dependencies install, lint and test tools are available — before any
+subsequent tasks run. If bootstrap fails, the scaffold task fails and can be
+retried/escalated like any other task. Previously, bootstrap ran as a
+separate node after verify_task had already marked the scaffold as passed,
+so bootstrap failures only produced warnings, not task failures.
+
+Files changed: `graph.py` (removed bootstrap node + route), `pipeline_state.py`
+(removed `bootstrap_done`), `verify_task.py` (added `_run_scaffold_bootstrap`),
+`config.py.template` (replaced 3 bootstrap fields with `SCAFFOLD_BOOTSTRAP_CMD`),
+`bootstrap.py` (tombstone — needs manual deletion), all 5 reference docs,
+`SKILL.md`.
+
 #### Templating Refactor (2026-04-14)
 
 Major skill change: pipeline files are now split into **templates** (copied
@@ -81,10 +105,10 @@ verbatim) and **generated** (project-specific). This eliminates the
 non-determinism of Claude Code regenerating stable files from memory or
 reference docs, which caused the timeout drift issue.
 
-**Templates (11 files, copied verbatim):**
+**Templates (10 files, copied verbatim):**
 - `run.py`, `pipeline_state.py`, `graph.py`, `agent_bridge.py`, `requirements.txt`
 - `nodes/__init__.py`, `nodes/load_tasks.py`, `nodes/execute_task.py`,
-  `nodes/verify_task.py`, `nodes/bootstrap.py`, `nodes/report.py`
+  `nodes/verify_task.py`, `nodes/report.py`
 - `config.py.template` (with `{{PLACEHOLDER}}` markers)
 
 **Generated (3 files, per-project):**
@@ -95,8 +119,8 @@ reference docs, which caused the timeout drift issue.
 **Key improvements baked into templates:**
 - `EXECUTOR_TIMEOUT = 300` and `MAX_RETRIES_PER_TASK = 1` are hardcoded
   literals that Claude Code cannot override from memory
-- `bootstrap.py` verifies lint/test tools after bootstrap via config-driven
-  `BOOTSTRAP_TOOL_CHECKS` and auto-installs if missing
+- verify_task runs bootstrap + tool verification as part of scaffold
+  verification via `SCAFFOLD_BOOTSTRAP_CMD` and `BOOTSTRAP_TOOL_CHECKS`
 - All template files are language-agnostic — platform-specific patterns
   (file extensions, stub error strings, collection error markers, scaffold
   marker files, tool checks) are driven by config fields
@@ -129,12 +153,16 @@ reference docs, which caused the timeout drift issue.
 23. Scaffold task creates `services.compose.yml` for dependency services
 24. Integration test task descriptions require exact function signatures
 25. Orchestrator/wiring tasks must depend on scaffold if they import config/settings
-26. **Pipeline templates** — 11 stable files copied verbatim, 3 generated
-27. **Bootstrap lint tool verification** — auto-installs missing tools post-bootstrap
+26. **Pipeline templates** — 10 stable files copied verbatim, 3 generated
+27. **Integrated scaffold verification** — scaffold tasks verify marker file,
+    run bootstrap, and check lint/test tool availability in a single verify_task
+    pass. Failures are retryable/escalatable like any other task.
 28. **Config template with placeholders** — prevents value drift from model memory
 29. **Language-agnostic templates** — all platform-specific patterns (file extensions,
     stub error strings, collection error markers, scaffold marker files, tool checks)
     driven by config fields, not hardcoded in template code
+30. **Stub mock-import rule** — stubs must import third-party dependencies that
+    tests will mock at the module boundary (decomposition skill)
 
 ---
 
@@ -192,18 +220,11 @@ Task-13 failed: stub missing pika import for test patching.
 ## Next Steps
 
 - **Run T10** with templated pipeline — validates that templates copy
-  correctly, timeout is 300s, and bootstrap lint verification works
-- **Discuss scaffolding ownership**: Should Claude Code execute the scaffold
-  step during Phase 2 (before handoff) to validate the entire tooling chain?
-  The old `implementation-planning` skill did this. Would enable Phase 3 to
-  actually run verify_task against real files
-- **Task-13 fix**: Stub files must import external dependencies that tests
-  will `patch()` against the module. Needs discussion on where this belongs
-  (decomposition task description vs test-task prompt rules)
-- **E501 on string literals**: Decide whether to ignore E501 globally or
-  raise the lint line-length limit for generated projects
+  correctly, timeout is 300s, and integrated scaffold verification works
 - **Aider+Qwen value**: Won 1/6 implementation tasks in T09. Consider
   promoting Gemini to tier-0 for implementation
+- **Manual cleanup**: Delete `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
+  (tombstone file from bootstrap merge)
 
 ---
 
@@ -260,12 +281,12 @@ Task-13 failed: stub missing pika import for test patching.
 │   └── task_schema.py
 └── references/
     ├── analysis-guide.md
-    ├── task-writing-guide.md
+    ├── task-writing-guide.md              # Updated: stub mock-import rule
     └── output-format.md
 
 ~/claude-devtools/skills/prototype-driven-implementation/
-├── SKILL.md                     # Updated: references templates/ directory
-├── templates/                   # NEW: verbatim pipeline files (language-agnostic)
+├── SKILL.md                     # Updated: no bootstrap.py in layout
+├── templates/                   # Verbatim pipeline files (language-agnostic)
 │   ├── run.py                   # Entry point with TeeWriter
 │   ├── pipeline_state.py        # LangGraph state TypedDicts
 │   ├── graph.py                 # StateGraph, routing, pick/retry/escalate nodes
@@ -276,15 +297,14 @@ Task-13 failed: stub missing pika import for test patching.
 │       ├── __init__.py
 │       ├── load_tasks.py        # Task loading, schema validation
 │       ├── execute_task.py      # Executor dispatch node
-│       ├── verify_task.py       # Auto-fix, lint, test verification
-│       ├── bootstrap.py         # Bootstrap + config-driven tool verification
+│       ├── verify_task.py       # Auto-fix, lint, test, scaffold bootstrap
 │       └── report.py            # Final summary
 └── references/
     ├── phase-1-analysis.md      # Executor detection, tooling, research
-    ├── phase-2-generation.md    # Updated: copy templates, generate 3 files
-    ├── langgraph-patterns.md    # Updated: design reference, points to templates
-    ├── executor-integration.md  # Updated: design reference, points to templates
-    └── phase-3-handoff.md       # Updated: template + config validation
+    ├── phase-2-generation.md    # Copy templates, generate 3 files
+    ├── langgraph-patterns.md    # State machine design reference
+    ├── executor-integration.md  # Executor dispatch and prompt composition
+    └── phase-3-handoff.md       # Validation and handoff
 
 ~/claude-devtools/commands/
 ├── prototype-plan.md

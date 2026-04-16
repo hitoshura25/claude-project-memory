@@ -37,15 +37,25 @@
   `operation: modify` to replace stub bodies with real logic. Schema validators
   enforce: only test tasks may create stubs; implementation tasks must use
   `modify` (not `create`) for stubbed files.
+- **Stubs must import mockable dependencies**: When tests mock a third-party
+  library at the module boundary (via Python's `unittest.mock.patch`, Java's
+  Mockito, TypeScript's Jest `jest.mock()`, etc.), the mocking framework
+  resolves the dependency as an attribute of the module under test. If the
+  stub omits the import, the framework cannot find the attribute and tests
+  fail at setup before any test logic runs. The decomposing model must
+  include these imports in the stub code it writes into the task description,
+  even though the stub body never calls the dependency.
 - **Security goes on implementation tasks, not test tasks**.
 
 ## From Implementation Skill (In Progress)
 
 - **Scaffold tasks must run from project root**: Scaffold-phase tasks run from
   project root, others from service root. File paths rebased accordingly.
-- **Tooling environment must be bootstrapped**: After scaffold creates config,
-  a bootstrap node fires automatically to install deps and make lint/test
-  commands available. This is a pipeline concern, not an upstream skill concern.
+- **Tooling environment must be bootstrapped as part of scaffold**: After
+  scaffold creates config, verify_task runs the bootstrap command
+  (`SCAFFOLD_BOOTSTRAP_CMD`) to install deps and make lint/test commands
+  available. If bootstrap fails, the scaffold task fails and can be
+  retried/escalated. This is a pipeline concern, not an upstream skill concern.
 - **Dry-run mode masks failures**: Removed dry-run; replaced with precondition
   validation (config consistency, path rebasing, schema import checks).
 - **Aider scripting flags**: `--yes-always`, `--no-git`, `--no-check-update`,
@@ -165,17 +175,21 @@
   `{{PLACEHOLDER}}` markers and hardcoded fixed values ensures critical
   settings like timeouts and retry limits are always correct.
 - **Pipeline templates must be language-agnostic.** Template files
-  (verify_task, bootstrap, etc.) must not contain hardcoded language
-  patterns like `.py` extensions, `NotImplementedError`, or `uv add --dev`.
-  All platform-specific behaviour is driven by config fields:
+  (verify_task, etc.) must not contain hardcoded language patterns like
+  `.py` extensions, `NotImplementedError`, or `uv add --dev`. All
+  platform-specific behaviour is driven by config fields:
   `SOURCE_FILE_EXTENSIONS`, `STUB_ERROR_PATTERN`,
   `TEST_COLLECTION_ERROR_PATTERNS`, `TEST_COLLECTED_PATTERNS`,
   `SCAFFOLD_MARKER_FILE`, and `BOOTSTRAP_TOOL_CHECKS`.
-- **Bootstrap must verify tool availability.** After the bootstrap command
-  runs, verify that lint and test tools are actually available. The
-  `BOOTSTRAP_TOOL_CHECKS` config field provides (verify_cmd, install_cmd)
-  pairs that the bootstrap node runs in sequence. This is config-driven
-  and language-agnostic — no hardcoded tool names in the template.
+- **Scaffold verification must include bootstrap and tool checks.** After
+  the scaffold executor creates project files, verify_task runs the
+  bootstrap command and verifies that lint and test tools are available.
+  The `BOOTSTRAP_TOOL_CHECKS` config field provides (verify_cmd,
+  install_cmd) pairs that verify_task runs during scaffold verification.
+  If bootstrap or tool checks fail, the scaffold task fails and can be
+  retried/escalated — unlike the previous design where bootstrap ran as
+  a separate node after verify_task had already marked the scaffold as
+  passed.
 - **Scaffold dev dependencies must include lint tools.** The design doc's
   Tooling section specifies which linter to use, but this doesn't guarantee
   the scaffold task's project config includes it in dev dependencies.
