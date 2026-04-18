@@ -208,6 +208,57 @@
   `lint/`, `tests/`). This keeps diagnostics organized and makes error
   files easy to reference in retry/escalation prompts.
 
+### From T10–T13 Prompt & Spec Tightening
+
+- **System-prompt bloat is a larger source of model confusion than
+  per-task bloat.** When the universal preamble for every task carries
+  component-specific domain knowledge (database schema nuances, third-party
+  library quirks, domain-specific unit conversions), every task's prompt is
+  polluted with context 95% of it doesn't need. Tightening the universal
+  preamble to generic rules only (role, project skeleton, test/stub rules,
+  coding conventions, output format) — and letting per-task content carry
+  the component-specific detail — eliminates a class of confusion that
+  tighter task specs alone don't. In practice, this alone moved three
+  test tasks from multi-retry-or-escalation to first-attempt success on
+  the mid-tier (Gemini Flash) executor, even without per-task tightening.
+- **Tight task-doc templates with fixed fields beat freeform prose.**
+  Freeform descriptions accumulate internal contradictions (one sentence
+  says "keep the class instantiatable," another says "every method raises
+  NotImplementedError") that models resolve by picking one or the other
+  arbitrarily. A fixed template — Component / Component type / Interface /
+  Behaviors / Expected failure mode / Out of scope — forces the decomposer
+  to commit to a coherent story before emitting the task, because each
+  field has a specific job and contradictions become visible.
+- **Test over-specification is a distinct failure class from
+  under-specification.** Under-specified tests fail because they can't
+  import, can't find fixtures, or have inconsistent mock paths. Over-
+  specified tests fail because they assert on details (argument values,
+  call counts, specific parameter names) that the task description never
+  prescribed. No implementation can satisfy them, because the constraint
+  lives only in the test file. This doesn't get better with a more capable
+  test-writer (a Claude-as-test-writer experiment exhibited the same
+  pattern); it gets better only with explicit guardrails on what tests
+  may assert.
+- **Partial-stub components need a structural fix, not more prose.**
+  Components like `pydantic-settings.BaseSettings` are "partial stubs":
+  field declarations are real (they're the contract), but one or more
+  methods are stubbed with `NotImplementedError`. A hardcoded single-
+  pattern check in `verify_task` can't distinguish correct partial stubs
+  from leaked-logic stubs when test ordering hides the raise. The fix is
+  a schema field `expected_test_failure_modes: list[str]` driving the
+  check, not more prompt prose.
+- **Filter dependency inlining by file relevance.** Inlining every
+  dependency file into every prompt (Avro schemas, compose YAML,
+  Dockerfiles) adds noise for tasks that don't consume those file types.
+  Limit dependency inlining to files the current task could actually
+  `import` at the source level (`.py`, `.toml`, `.cfg`, `.ini` for Python
+  projects; adapt per ecosystem).
+- **Duplicate rule blocks across prompt sections silently contradict.**
+  If the universal preamble and the per-task section both describe stub
+  rules or test rules in overlapping prose, they drift over time and the
+  model gets two conflicting versions of the same rule. Each rule belongs
+  in exactly one section of the composed prompt.
+
 ## From Prior Skill Set (49 Trials)
 
 - LLM non-determinism makes "Big Design Up Front" a losing strategy.

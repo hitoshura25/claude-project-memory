@@ -13,6 +13,10 @@
 | T07 | 2026-04-07 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ Partial | 31 tasks; I001 lint loops, Gemini 429s, DAG field drift, integration test sigs wrong |
 | T08 | 2026-04-09 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ 19/22 | I001 fixed; 600s timeout drift; Gemini stubs-pass + E501; task-20 failed all tiers |
 | T09 | 2026-04-13 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ 12/17 | 8 passed + 4 degraded; ruff missing from dev deps; task-13 stub import bug; timeout still 600s |
+| T10 | 2026-04-16 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ 5/19 | Templating refactor validated; split-file test bug (task-07); mock path inconsistency (task-05) |
+| T11 | 2026-04-16 | implementation | Aider+Qwen → newer Gemini → Claude | ⚠️ 6/19 | Gemini upgrade fixed mock drift; stubs-pass failures surfaced (defensive defaults) |
+| T12 | 2026-04-16 | implementation | Aider+Qwen → Claude (tests) → Claude (impl) | ❌ 2/19 | Claude-as-test-writer; verify_task rigidity rejected valid partial stub (task-02) |
+| T13 | 2026-04-17 | implementation | Aider+Qwen → Gemini → Claude | ⚠️ 5/19 | Tight system prompt + tight task-02 spec; all 3 test tasks passed tier 0 r0; task-05/07 are test over-specification failures |
 
 ---
 
@@ -26,6 +30,10 @@ T05 → T06: Stub workflow validated, /no_think + model settings applied, test f
 T06 → T07: Re-decomposed with inline patterns + output field contracts. Field drift fixed, structlog everywhere. But I001 lint loops returned as #1 failure mode (unchanged since T01). Led to AIDER_LINT_CMD (auto-fix before check), TeeWriter stdout capture, 300s timeout.
 T07 → T08: AIDER_LINT_CMD fixed I001 loops. TeeWriter captured full log. But timeout was still 600s due to config drift (hardcoded literal in example code). Led to config value deduplication.
 T08 → T09: MAX_RETRIES=1 cut runtime from 6.9h to 1.8h. But timeout still drifted to 600s (Claude Code memory contamination). ruff missing from dev deps caused early lint failures. Task-13 stub import bug. Led to pipeline templates refactor.
+T09 → T10: Templating refactor held (300s timeout stable). Split-file test bug (task-07) and mock path inconsistency (task-05) exposed test-writing quality as a coherence problem, not a generation problem.
+T10 → T11: Gemini upgrade improved intra-file consistency; new stubs-pass failure class surfaced where tests with defensive defaults pass against partial stubs instead of failing with NotImplementedError.
+T11 → T12: Claude-as-test-writer experiment exposed `verify_task` rigidity for partial stubs — correct output rejected by hardcoded single-pattern check.
+T12 → T13: System prompt tightening + per-task tight template eliminated prompt contradictions and noise. All 3 test tasks passed tier 0 retry 0. Remaining failures are test over-specification (task-05) and fixture path bugs (task-07) — a different failure class from prompt-structure issues. Led to skill refactor plan: drop .md outputs from decomposition, tighten task-doc template, bake compose_prompt.py changes into implementation skill templates, add `expected_test_failure_modes` schema field.
 
 ---
 
@@ -44,5 +52,5 @@ T08 → T09: MAX_RETRIES=1 cut runtime from 6.9h to 1.8h. But timeout still drif
 | Skill | Status | Last Validated |
 |-------|--------|----------------|
 | prototype-driven-planning | ✅ Built | 2026-03-28 (2 test runs) |
-| prototype-driven-task-decomposition | ✅ Built | 2026-03-28 (3 test runs) |
-| prototype-driven-implementation | 🔄 In progress | T09 (2026-04-13) |
+| prototype-driven-task-decomposition | ✅ Built; refactor queued | T13 (2026-04-17) |
+| prototype-driven-implementation | 🔄 In progress; refactor queued | T13 (2026-04-17) |

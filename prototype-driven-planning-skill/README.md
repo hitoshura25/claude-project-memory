@@ -33,7 +33,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-15)
+## Current State (2026-04-17)
 
 ### Built and Validated
 
@@ -43,7 +43,64 @@ auto-fix, test, bootstrap, and service root fields.
 
 **prototype-driven-task-decomposition** — 3 phases (Analysis → Task Generation →
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
-pairing enforced by PydanticAI schema validators.
+pairing enforced by PydanticAI schema validators. **Refactor queued** (see
+`refactor-plan-2026-04-17.md`): drop `.md` output (move rendering to
+implementation skill), emit tight task-doc format, add
+`expected_test_failure_modes` schema field.
+
+### T10–T13 Arc (2026-04-16 through 2026-04-17)
+
+Four runs on the same 19-task decomposition. Full detail in
+`trials/T10-T13-tightening-arc.md`. Summary:
+
+- **T10**: 5/19. Templating refactor held. Split-module test bug (parser
+  across task-07/08 sharing test file) and mock path inconsistency
+  (task-05) exposed test-writing as a coherence problem.
+- **T11**: 6/19. Gemini upgrade fixed intra-file mock drift. New failure
+  class: defensive-default tests that pass against partial stubs instead
+  of raising NotImplementedError.
+- **T12**: 2/19. Claude-as-test-writer experiment. Revealed `verify_task`
+  rigidity — correct partial stub rejected by hardcoded single-pattern check.
+- **T13**: 5/19. Tight system prompt + tight task-02 spec. **All 3 test tasks
+  passed Gemini tier 0 retry 0.** ~55% prompt size reduction for task-02.
+  Remaining failures are test over-specification (task-05) and fixture path
+  resolution (task-07) — different failure class than prompt-structure issues.
+
+**Key findings driving the skill refactor:**
+
+1. System-prompt bloat confuses models more than per-task bloat.
+   Tightening the universal preamble alone fixed three test tasks.
+2. Tight task-doc templates with fixed fields (Component / Component
+   type / Interface / Behaviors / Expected failure mode / Out of scope)
+   eliminate prompt contradictions.
+3. Test over-specification is distinct from under-specification and
+   doesn't get better with a more capable test-writer.
+4. Partial-stub components need a structural fix (`expected_test_failure_modes`
+   schema field), not more prose.
+5. Dependency inlining should filter to files the task could actually import.
+6. Duplicate rule blocks across prompt sections silently contradict — each
+   rule belongs in exactly one section.
+
+### Skill Refactor Queued
+
+See `refactor-plan-2026-04-17.md` for full plan.
+
+**Decomposition skill changes:**
+- Emit `tasks.json` only (stop emitting `.md` files)
+- Tight task-doc template as the authoritative format
+- Add `expected_test_failure_modes: list[str]` to Task schema
+
+**Implementation skill changes:**
+- Render per-task `.md` files from `tasks.json` during pipeline generation
+- Bake `compose_prompt.py` tight-system-prompt + duplicate-rule-removal +
+  filtered-dependency-inlining changes into templates (T13-validated)
+- Wire `expected_test_failure_modes` into `verify_task`
+
+**Not changing:**
+- Pipeline runtime (reads `tasks.json` today, continues to)
+- Other schema fields (none earned removal, none earned promotion from prose)
+- Testing / validation mechanisms at the pipeline level beyond the one
+  verify_task wiring change
 
 ### Updated — Implementation Skill (2026-04-15)
 
