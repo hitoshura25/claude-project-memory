@@ -28,6 +28,8 @@
   questions at Phase 1 lets the user answer everything in one message.
 - **Schema validation catches real bugs**: The `validate_tdd_pairing` validator
   caught a task with tests but no test-task dependency during a live run.
+  The `validate_test_command_non_empty` validator would have caught the T14
+  task-16 integration-test gap (Docker-wrapped command in prose only).
 - **`uv run --with <package>` over venv activation**: venv activation doesn't
   persist in Claude Code; `uv run` is reliable.
 - **Scaffold stubs enable proper TDD**: Test tasks create stub files alongside
@@ -94,12 +96,18 @@
   names (e.g., database column `heart_rate_variability_millis`) with output
   names (e.g., Avro field `rmssd_ms`) at decomposition time, not leave it to
   the implementing model.
-- **Tasks without test gates can hide broken code**: If a task only has a
-  lint gate (no tests), syntactically valid but functionally broken code
-  passes the pipeline. Integration test tasks are especially vulnerable —
-  they may reference function signatures from modules not in their
-  `depends_on` chain and get them all wrong. Consider adding import-level
-  checks or requiring interface dependencies for all cross-module references.
+- **Every task needs a verification gate beyond lint.** Syntactically valid
+  but functionally broken code passes lint — wiring tasks with wrong
+  function signatures, integration tests without services running,
+  Dockerfiles with broken COPY directives, scaffold tasks with
+  syntax-broken conftest. The schema-required `test_command` field on
+  every task closes this: test tasks run their test file, implementation
+  tasks run the paired tests, wiring tasks run an AST parse or import
+  check, infrastructure tasks run `docker build` or `docker compose
+  config`, scaffold tasks run the test runner with "no tests collected =
+  success" semantics to verify test infrastructure before any tests
+  exist. This supersedes the older "tasks without test gates can hide
+  broken code" observation.
 - **Aider's lint command must auto-fix before reporting**: Aider's
   `--auto-lint` flag runs the lint command after each edit and gives the
   model a reflection turn to fix any errors found. Trivially auto-fixable
@@ -121,8 +129,10 @@
   task (it's project infrastructure). The integration test task description
   must include exact function signatures for every module under test — without
   them, the model guesses arities and produces syntactically valid but
-  functionally broken tests. No special schema fields or pipeline metadata
-  are needed; the service lifecycle is entirely in the test command.
+  functionally broken tests. The full wrapped command lives in the task's
+  required `test_command` schema field, not prose — the decomposer owns
+  it, the schema validates it, Phase 2 copies it verbatim into
+  `TASK_TEST_COMMANDS`.
 - **Orchestrator tasks must depend on every task they import from**: The
   implementation pipeline inlines dependency source code into the prompt,
   but only for direct dependencies. If a DAG/wiring task imports `Settings`
@@ -258,6 +268,51 @@
   rules or test rules in overlapping prose, they drift over time and the
   model gets two conflicting versions of the same rule. Each rule belongs
   in exactly one section of the composed prompt.
+
+### From T14 Test Command Gap
+
+- **Prose is a lossy transport between decomposer and generator.** When
+  the decomposer writes a specific command or contract into a task's
+  description but the pipeline generator has no schema field to read it
+  out of, the specific form does not survive the transition. The fix is
+  a dedicated schema field and a generator rule that copies it verbatim.
+  T14's failure mode was the decomposer writing a Docker-compose-wrapped
+  test command into task-16's description while Phase 2 derived a plain
+  pytest command from task file paths; tests ran without services and
+  failed at fixture setup by design.
+- **Runtime failure alone is not evidence of what to fix.** Task-16 failed
+  all 4 attempts with `pytest.fail()` fires at fixture setup — exactly
+  what the spec required when services are unavailable. Claude's
+  escalation-retry correctly diagnosed "no changes needed." The bug was
+  one layer up: the generator, not the executor. Post-mortem must trace
+  the generated pipeline configuration back to the decomposition source
+  before concluding what needs to change.
+- **Promote a field to the schema when its absence causes a real bug, not
+  speculatively.** `test_command` earned its place by failing T14.
+  `expected_test_failure_modes` earned its place by failing T12. Fields
+  that have not caused a real failure stay in prose.
+- **Validators catch a class of bug, not individual bugs.** The schema's
+  non-empty-`test_command` validator fires on every task equally. The
+  integration-lifecycle validator is a light heuristic (description
+  mentions docker/compose AND test_type is integration/e2e AND command
+  lacks up/down verbs or testcontainers) — false-negative prone by
+  design, because false positives would reject valid decompositions
+  that use in-process service stubs or unusual naming conventions.
+- **Scaffold tasks deserve a real test gate too.** The old behavior
+  verified `pytest --co -q || true` (always exits 0) as a proxy for
+  "test runner is installed." The new behavior runs the scaffold's own
+  `test_command` (e.g., `uv run pytest tests/ -x || [ $? -eq 5 ]`),
+  which exercises the actual test infrastructure — conftest loads,
+  pyproject.toml configures pytest correctly, pythonpath resolves — on
+  an empty test directory. If any of those are broken, the scaffold
+  task fails early rather than every later test task failing mysteriously.
+- **Keep the verification-mode selector separate from the command.**
+  `INTEGRATION_TEST_TASK_IDS` (pipeline-level set that switches
+  verify_task between "must pass" and "must fail with stub error")
+  remained a separate concern from `test_command` (the shell command
+  to run). They are orthogonal — a task can have an integration-style
+  command without being in the set, or vice versa. Fusing them would
+  conflate "what runs" with "how success is judged."
 
 ## From Prior Skill Set (49 Trials)
 

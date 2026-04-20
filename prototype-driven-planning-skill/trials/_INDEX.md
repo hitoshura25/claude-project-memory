@@ -18,6 +18,7 @@
 | T11 | implementation | Qwen+newGemini+Claude | ⚠️ 6/19 | `stubs-pass-defensive`, `split-module-tests` | test-writer output, verify_task logic | Newer Gemini fixed intra-file mock drift but wrote defensive-default tests that pass against partial stubs instead of raising NotImplementedError | Queued — explicit "expected test failure mode" in task spec |
 | T12 | implementation | Qwen+Claude-tests+Claude-impl | ❌ 2/19 | `partial-stub-gap`, `verify-rigidity` | verify_task stub-pattern check | Claude produced valid partial stub (Pydantic fields + one NotImplementedError method); verify_task's hardcoded single-pattern check rejected correct output because pytest -x ordering hid the raise | Queued — `expected_test_failure_modes` schema field |
 | T13 | implementation | Qwen+Gemini+Claude | ⚠️ 5/19 | `test-over-specification`, `fixture-path-bug`, `system-prompt-bloat-fixed` | compose_prompt system prompt, task-02 spec, Gemini test assertions | Tight system prompt + tight task-02 spec passed all 3 test tasks on first Gemini attempt; remaining failures are test over-specification (task-05) and fixture path resolution (task-07) | Queued — refactor plan 2026-04-17 |
+| T14 | implementation | Qwen+Gemini+Claude | ⚠️ 16/17 | `lossy-prose-transport`, `test-command-gap`, `integration-test-no-services` | Phase 2 generation, config.py TASK_TEST_COMMANDS, task-16 integration | T13 refactor landed and held (tight task-doc, JSON-only output, expected_test_failure_modes). Only task-16 failed: Docker-compose-wrapped test_command embedded in task description prose but Phase 2 derived plain `pytest <file> -x` with no lifecycle. Tests ran without services; fixtures hard-failed by design. | Yes — refactor plan 2026-04-19: required `test_command: str` schema field + validators |
 
 ---
 
@@ -56,3 +57,6 @@
 | `test-over-specification` | Tests assert on details absent from task spec, blocking any implementation from satisfying them |
 | `fixture-path-bug` | Test fixture uses path-resolution logic that resolves wrong under the current project layout |
 | `system-prompt-bloat-fixed` | Tightening the per-prompt system-message content eliminated a failure class |
+| `lossy-prose-transport` | Task description prose contains a specific command, contract, or value that the downstream skill has no schema field to read; information is lost in translation |
+| `test-command-gap` | Per-task verification command lives only in prose; generator substitutes a generic default that doesn't meet the task's actual needs |
+| `integration-test-no-services` | Integration test runs without the external services it depends on being started; fixtures fail by design |
