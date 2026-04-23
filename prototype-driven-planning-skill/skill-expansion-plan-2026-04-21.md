@@ -1,5 +1,41 @@
 # Skill Expansion Plan — Closed Open Questions, New Roadmap Skill, Prototype Security Tooling
 
+> **⚠️ STATUS (updated 2026-04-23): Parts A + C LANDED. Part B PENDING.**
+>
+> Parts A (Open Questions Triage) and C (prototype security-tooling
+> validation) landed on 2026-04-23 through a three-iteration refinement
+> arc (P01–P03 in `trials/`). The landed work expanded beyond the
+> original plan — see below.
+>
+> **What landed (beyond original plan scope):**
+> - Part A: assertion test added as a 2nd triage diagnostic (P02).
+> - Part C: Surface Coverage Check added — ecosystem SAST table is a
+>   starting point, not a specification (P01).
+> - Part C: severity-indexed Handling Findings policy + 5-option
+>   Mitigation Ladder + Environmental Risk Assessment rules (P03).
+> - New cross-cutting: Scope-Removal Triage in Phase 2 (P01).
+> - New cross-cutting: `## Scope Deferrals from Phase 1` section in
+>   design-doc template (P02).
+> - New cross-cutting: Judgment vs. Observation labeling in Writing
+>   Quality subsection (P02).
+> - Five new Principles in SKILL.md (tables-as-starting-points,
+>   removals-are-user-decisions, observation-and-judgment-labeled,
+>   security-findings-severity-indexed, prototype-stays-mutable-during-loopbacks).
+>
+> **Part B (`prototype-driven-roadmap` skill) still pending.** The
+> design as specified in § 2.2 and § 5 of this document remains the
+> intended plan. Parts A and C landing does not change Part B's design —
+> the roadmap skill still consumes a signed-off design doc, produces
+> one markdown file per component, with BDD scenarios and data-flow-
+> scoped ASVS/MASVS security scenarios.
+>
+> **For current state of the planning skill**, see `README.md` §
+> "Current State" and the P01/P02/P03 trial files. This plan doc
+> remains as a historical reference for Part B's design and for
+> understanding the intent of Parts A and C before they were expanded.
+
+---
+
 > **Date:** 2026-04-21
 > **Scope:** `prototype-driven-planning` skill (modify); new `prototype-driven-roadmap` skill (create); memory repo (update)
 > **Driver:** User-requested additions. Two motivating observations from prior runs:

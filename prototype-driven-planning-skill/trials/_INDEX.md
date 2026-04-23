@@ -3,6 +3,8 @@
 > Find trials by failure pattern, affected component, or root cause.
 > Each row is immutable once written.
 
+## Pipeline trials (implementation skill)
+
 | Trial | Skill | Model | Result | Tags | Component(s) | Root Cause Summary | Skill Change? |
 |-------|-------|-------|--------|------|--------------|-------------------|---------------|
 | T01 | implementation | Qwen 3 Coder 30B | ❌ Partial | `circuit-breaker`, `aider-scripting` | verify_task, Aider lint loop | Qwen can't fix I001/F401 ruff errors; burns reflection cycles | Yes — auto-fix step, ecosystem runners |
@@ -19,6 +21,14 @@
 | T12 | implementation | Qwen+Claude-tests+Claude-impl | ❌ 2/19 | `partial-stub-gap`, `verify-rigidity` | verify_task stub-pattern check | Claude produced valid partial stub (Pydantic fields + one NotImplementedError method); verify_task's hardcoded single-pattern check rejected correct output because pytest -x ordering hid the raise | Queued — `expected_test_failure_modes` schema field |
 | T13 | implementation | Qwen+Gemini+Claude | ⚠️ 5/19 | `test-over-specification`, `fixture-path-bug`, `system-prompt-bloat-fixed` | compose_prompt system prompt, task-02 spec, Gemini test assertions | Tight system prompt + tight task-02 spec passed all 3 test tasks on first Gemini attempt; remaining failures are test over-specification (task-05) and fixture path resolution (task-07) | Queued — refactor plan 2026-04-17 |
 | T14 | implementation | Qwen+Gemini+Claude | ⚠️ 16/17 | `lossy-prose-transport`, `test-command-gap`, `integration-test-no-services` | Phase 2 generation, config.py TASK_TEST_COMMANDS, task-16 integration | T13 refactor landed and held (tight task-doc, JSON-only output, expected_test_failure_modes). Only task-16 failed: Docker-compose-wrapped test_command embedded in task description prose but Phase 2 derived plain `pytest <file> -x` with no lifecycle. Tests ran without services; fixtures hard-failed by design. | Yes — refactor plan 2026-04-19: required `test_command: str` schema field + validators |
+
+## Planning-skill iterations
+
+| Trial | Skill | Target | Result | Tags | Section(s) Changed | Root Cause Summary | Skill Change? |
+|-------|-------|--------|--------|------|--------------------|-------------------|---------------|
+| P01 | planning | airflow-google-drive-ingestion | ⚠️ 2 failure modes | `table-as-complete-spec`, `silent-scope-removal`, `surface-coverage-gap`, `judgment-as-fact` | phase-2-prototype.md (Security Tooling Validation, Scope-Removal Triage), SKILL.md (Phase 2 Step 7, STOP report, Principles) | Security tool selection table read as complete specification (bandit only for a project with Dockerfile + compose); Airflow DB persistence silently dropped from approved Phase 1 scope with "for the prototype, X isn't needed" rationalization | Yes — Surface Coverage Check + Scope-Removal Triage + 2 Principles |
+| P02 | planning | airflow-google-drive-ingestion | ⚠️ 3 failure modes | `feasibility-in-disguise`, `judgment-as-fact`, `deferred-decisions-abuse`, `phase-1-scope-ambiguity` | phase-3-design-doc.md (Open Questions Triage adds assertion test, Judgment vs. Observation subsection in Writing Quality), design-doc-template.md (Scope Deferrals from Phase 1 section added), SKILL.md (Principles) | Deferred Decisions contained items passing "difference test" but failing an unstated "assertion test" (the design doc asserts something unobserved, e.g., "boto3 upgrade is API-stable"); judgment-call prose indistinguishable from observation prose; Phase 1 user-approved deferrals conflated with model-designed prototype limitations | Yes — assertion test (2nd triage diagnostic) + Scope Deferrals from Phase 1 section + Judgment vs. Observation + Principle |
+| P03 | planning | airflow-google-drive-ingestion | ⚠️ 3 failure modes | `severity-blind-handling`, `environmental-assessment-shortcut`, `transitive-reachability-handwave`, `lesser-evil-tradeoff` | phase-2-prototype.md (Handling findings subsection, Mitigation Ladder subsection, Environmental Risk Assessment subsection), SKILL.md (Phase 2 Step 7, STOP report, Principle) | Critical CVEs proposed for routine deferral (no severity policy); environmental risk assessment finalized unilaterally without user review; only two mitigation options considered (stay-or-upgrade); downgrade/pin/override/exclude not explored; transitive reachability claimed without specific evidence | Yes — Severity-indexed handling + Mitigation Ladder + Environmental Risk Assessment + Principle |
 
 ---
 
@@ -60,3 +70,14 @@
 | `lossy-prose-transport` | Task description prose contains a specific command, contract, or value that the downstream skill has no schema field to read; information is lost in translation |
 | `test-command-gap` | Per-task verification command lives only in prose; generator substitutes a generic default that doesn't meet the task's actual needs |
 | `integration-test-no-services` | Integration test runs without the external services it depends on being started; fixtures fail by design |
+| `silent-scope-removal` | Model drops an approved-scope item mid-phase without surfacing the removal to the user (often framed as "for the prototype, X isn't needed") |
+| `table-as-complete-spec` | Model reads a reference table in the skill as an exhaustive specification (one cell per question) rather than as a starting point for reasoning about additional surfaces or options |
+| `surface-coverage-gap` | Security tooling runs only against the primary language surface (e.g., bandit on Python) and misses additional file surfaces carried by the prototype (Dockerfile, docker-compose, IaC, shell) |
+| `judgment-as-fact` | Model states a judgment call in observation-shaped prose, without citing evidence or labeling it as inference — makes the claim indistinguishable from prototype observation to a future reader |
+| `feasibility-in-disguise` | An open question framed as an operational decision (passes the "difference test" of not changing architecture) but requires the design doc to assert something the prototype didn't observe (fails the "assertion test") |
+| `deferred-decisions-abuse` | Items placed in Deferred Decisions that should have required user decision or prototype extension, masked by "implementation-phase decision" framing |
+| `phase-1-scope-ambiguity` | Design doc conflates user-approved Phase 1 scope deferrals with model-designed prototype minimum-viable-validation limitations; downstream readers can't distinguish the two |
+| `severity-blind-handling` | Security findings treated uniformly regardless of Critical/High/Medium/Low severity; routine deferral path offered for Critical findings that should block |
+| `environmental-assessment-shortcut` | Model uses contextual CVSS reasoning ("this doesn't apply to us because we're not running a public proxy") to accept findings without first exploring mitigations; environmental assessment finalized unilaterally without user review |
+| `transitive-reachability-handwave` | Assessment that vulnerable code is unreachable lacks specific evidence (module-level import graph, reachability analysis) — relies on shape-of-argument rather than concrete observation |
+| `lesser-evil-tradeoff` | Model presents two options and picks the less-bad one without exploring the fuller option space (pinning, downgrading, overriding, excluding, replacing) |

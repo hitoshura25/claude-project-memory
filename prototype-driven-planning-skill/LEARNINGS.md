@@ -7,6 +7,8 @@
 
 ## From Planning Skill
 
+### Core planning principles
+
 - **Integration boundary mapping over single-risk identification**: Phase 1
   should map all integration boundaries, not just one "core risk."
 - **Blocker handling must be explicit**: Skills should instruct the model to
@@ -14,6 +16,129 @@
 - **End-to-end validation is distinct from internal validation**: Running code
   internally is necessary but not sufficient.
 - **Conditional Dockerfiles**: Skip for mobile apps, libraries, CLI tools.
+
+### From Part A + Part C rollout (P01–P03, 2026-04-23)
+
+The planning skill's Open Questions Triage (Part A) and prototype
+security-tooling validation (Part C) from `skill-expansion-plan-2026-04-21.md`
+landed through a three-iteration refinement arc against
+`health-data-ai-platform`. Each iteration surfaced a distinct failure mode
+that prose-level rules alone didn't catch; each fix forced the model's
+reasoning into a visible artifact.
+
+- **Tables are starting points, not terminuses.** When the skill provides a
+  reference table of tools or defaults (security tooling, lint auto-fix, dep
+  scanners), the model reads it as a complete specification — one row per
+  question, pick the matching cell, stop. A prototype with a Dockerfile and
+  docker-compose file will pass `bandit` (the Python row for SAST) cleanly
+  while shipping real security issues that the table's row doesn't cover.
+  The fix is to make "start from the table, then run a surface-coverage
+  check" an explicit mandatory step, not an implied one — and to name the
+  failure pattern in the skill so the model recognizes the temptation.
+  (P01)
+
+- **Removals from approved Phase 1 scope are user decisions, not model
+  decisions.** Mid-phase, the model is tempted to simplify by dropping
+  "items that aren't needed for the prototype" — an approved dependency
+  service, an additional data format, a retry path, a non-happy-path code
+  branch. Rephrased in user-facing terms, this is a silent scope change.
+  The skill's forcing function is a three-bucket Scope-Removal Triage
+  (User-confirmed removal / Requires user decision / Must be validated)
+  with the rule that model-initiated removals of approved items never
+  happen silently. A mandatory STOP-report bullet ("Removals from Phase 1
+  scope — if there were no removals, say so explicitly") is the backstop.
+  (P01)
+
+- **Observation and judgment are labeled distinctly in the design doc.**
+  The design doc is not an observation log — it legitimately contains
+  model-derived judgments (recommendations, prescriptions, inferences).
+  But those judgments must be labeled. Behavioral claims without prototype
+  evidence carry "*Not observed — based on inference*" labels; prescriptive
+  claims ("should be refactored to X") carry "**Prescribed (not validated)**"
+  labels. Unlabeled judgment in fact-shaped prose is systematically
+  misleading even when the judgments themselves are sound — a future
+  implementer can't distinguish tested pattern from model hypothesis. (P02)
+
+- **No feasibility question ships in the design doc; both the difference
+  test and the assertion test apply.** Open Questions Triage originally
+  used one diagnostic — the difference test ("does the answer change the
+  architecture?"). It's necessary but not sufficient. Items can pass the
+  difference test (they look operational) while failing an unstated
+  assertion test: accepting the item as "deferred to implementation"
+  requires the design doc to assert something the prototype didn't observe.
+  A "version bump is operational" deferral where the design doc must
+  assert API-surface compatibility is the canonical shape. Both diagnostics
+  run on every item. The triage-output template has an explicit "Passes
+  assertion test: ..." field to force the check. (P02)
+
+- **Phase 1 scope deferrals and prototype design choices are different
+  things and must be recorded separately.** The design-doc template
+  previously had one "Limitations of the prototype" list that conflated
+  two provenances: items the user agreed to defer during Phase 1 (user
+  decisions) and design choices the model made about minimum viable
+  validation within approved scope (model decisions). A new `## Scope
+  Deferrals from Phase 1` section captures the user-decision items
+  explicitly; the Prototype Reference "Limitations" subsection is now
+  scoped to model-design-choice items only. If nothing was deferred in
+  Phase 1, the section reads "None — all Phase 1 scope was validated" —
+  silence is not an allowed outcome. (P02)
+
+- **Security findings get severity-indexed handling, not blanket deferral.**
+  Before P03 the skill had no policy distinguishing Critical/High/Medium/
+  Low — every finding went through the same "propose deferral, await
+  confirmation" flow. Real trial behavior: Critical transitive CVEs
+  proposed for routine deferral. The policy is now severity-indexed:
+  Critical findings are blockers requiring the full Mitigation Ladder;
+  High findings must attempt a fix; Medium and Low attempt if low-cost and
+  surface-with-recommendation otherwise. "Attempt fix" means a concrete
+  version change (forward OR backward — downgrading is a valid move),
+  transitive override, exclusion, or replacement — not deferral as a
+  first response. Secrets-scan findings have no severity tiering; any
+  finding is Critical. (P03)
+
+- **Security mitigation has an ordered option space; explore before
+  accepting.** The Mitigation Ladder is five ordered options: direct
+  upgrade of the top-level dep → override/pin/downgrade the transitive
+  dep → exclude the transitive dep if pulled in by an unused extra →
+  replace the top-level dep → accept with compensating controls. The
+  model must work the ladder and record the attempt log. "Upgrade to
+  version N makes things worse (introduces new CVEs), so we stay on the
+  current version" is the exact failure mode this ladder exists to
+  prevent — picking the lesser of two evils in a two-option space when
+  three more options existed. Option 5 (accept) requires explicit user
+  decision plus a compensating control, not just a written rationale.
+  (P03)
+
+- **Environmental risk assessments are proposals, not decisions.**
+  Contextual CVSS reasoning ("the Critical score assumes public-facing
+  deployment, which we're not") is legitimate security practice but
+  dangerous as a model output. The model surfaces the assessment as part
+  of Mitigation Ladder option 5; it does not unilaterally finalize.
+  Reachability must be addressed specifically — "not running a public
+  proxy" is not enough, the assessment must cite module-level or
+  function-level reachability evidence. Assessments are labeled as
+  judgment (per Judgment vs. Observation). Critical-severity assessments
+  additionally name a condition under which the assessment would be
+  wrong, forcing the model to surface its own uncertainty. (P03)
+
+### Cross-cutting meta-pattern from P01–P03
+
+The six lessons above share a single underlying pattern: **an LLM can
+reliably do reasoning it has to make visible; it cannot reliably do
+reasoning it can internalize and shortcut.** The skill's job is to force
+visibility at every boundary where judgment replaces observation.
+
+Surface Coverage Check makes tool-selection reasoning visible.
+Scope-Removal Triage makes scope-change reasoning visible. The assertion
+test makes deferral-classification reasoning visible. Judgment vs.
+Observation makes prose-level claims visible. The Mitigation Ladder makes
+security-mitigation reasoning visible. Environmental Risk Assessment rules
+make contextual-risk reasoning visible.
+
+When a new failure mode emerges, the useful question is not "what rule
+prevents this?" but "what reasoning did the model do silently that should
+have been made visible?" The artifact that forces the visibility is the
+fix.
 
 ## From Task Decomposition Skill
 

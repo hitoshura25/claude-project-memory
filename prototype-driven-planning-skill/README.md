@@ -8,7 +8,7 @@
 > - `~/claude-devtools/skills/prototype-driven-task-decomposition/`
 > - `~/claude-devtools/skills/prototype-driven-implementation/`
 > - `~/claude-devtools/skills/prototype-driven-roadmap/` (planned; see
->   `skill-expansion-plan-2026-04-21.md`)
+>   `skill-expansion-plan-2026-04-21.md` Part B)
 >
 > **Commands**:
 > - `/prototype-plan <feature>` → planning skill
@@ -32,23 +32,52 @@ Load on-demand only when needed:
 - `references/stack-reference.md` — tool versions, configs, CLI flags, doc links
 - `gemini_conversation.txt` — raw Gemini consultation transcript (historical)
 - `trials/_INDEX.md` — structured tags per trial (find trials by failure pattern)
-- `trials/T<NN>-*.md` — individual trial detail (read when analyzing a specific trial)
+- `trials/T<NN>-*.md` — individual pipeline trial detail (T01–T14, implementation skill)
+- `trials/P<NN>-*.md` — individual planning-skill iteration detail (P01–P03)
 - `refactor-plan-2026-04-17.md` — T13 refactor plan (landed in T14)
 - `refactor-plan-2026-04-19.md` — T14 refactor plan (landed same day; validates in T15)
-- **`skill-expansion-plan-2026-04-21.md`** — **active plan**. Closed open
-  questions in planning, new `prototype-driven-roadmap` skill, prototype
-  security-tooling validation. Not yet landed. Read this when resuming work
-  on the expansion.
+- `skill-expansion-plan-2026-04-21.md` — expansion plan. **Parts A + C landed
+  2026-04-23** after P01–P03 refinement arc. **Part B (roadmap skill) still
+  pending.** Read this for Part B context when that work starts.
 
 ---
 
-## Current State (2026-04-19)
+## Current State (2026-04-23)
 
 ### Built and Validated
 
 **prototype-driven-planning** — 3 phases (Discovery → Tracer Bullet → Design Doc)
-with mandatory pauses. Design doc template includes Tooling section with lint,
-auto-fix, test, bootstrap, and service root fields.
+with mandatory pauses. Major expansion landed 2026-04-23 after a
+three-iteration refinement arc (P01–P03):
+
+- **Phase 2** now includes prototype security-tooling validation (dep
+  scan, secrets scan, SAST) with a Surface Coverage Check that forces
+  multi-tool selection for prototypes carrying multiple surfaces
+  (Dockerfile, compose, IaC, shell). Security findings are handled via
+  a severity-indexed policy and a 5-option Mitigation Ladder — Critical
+  findings block, all severities attempt fixes before deferral,
+  environmental risk assessments are proposals to the user rather than
+  unilateral decisions.
+- **Phase 2** also includes Scope-Removal Triage, forcing model-initiated
+  removals of approved Phase 1 items through a three-bucket classification
+  (User-confirmed / Requires user decision / Must be validated) with a
+  mandatory STOP-report bullet.
+- **Phase 3** has a new Open Questions Triage step before the final STOP.
+  Every open item goes through two diagnostics (difference test AND
+  assertion test) and is classified into three buckets (Resolved by user
+  decision / Requires prototype extension / Deferred to implementation).
+  The `## Open Questions` section in the design-doc template was renamed
+  `## Deferred Decisions` with a hard rule: no feasibility questions
+  allowed.
+- **Phase 3** Writing Quality section now has a **Judgment vs. Observation**
+  subsection with explicit labeling rules for behavioral claims (`Not
+  observed — based on inference`) and prescriptions (`Prescribed (not
+  validated)`).
+- **Design-doc template** now has a `## Scope Deferrals from Phase 1`
+  section separating user-approved out-of-scope items from
+  prototype-design-choice limitations. Silence is not an allowed outcome
+  — the section reads `None — all Phase 1 scope was validated` when
+  empty.
 
 **prototype-driven-task-decomposition** — 3 phases (Analysis → Task Generation →
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
@@ -57,6 +86,59 @@ pairing and per-task `test_command` enforced by PydanticAI schema validators.
 **prototype-driven-implementation** — LangGraph pipeline with templated stable
 files and verbatim `test_command` copy from the schema. Scaffold verification
 runs bootstrap + lint-tool check + the scaffold's own test_command.
+
+### Planning Skill P01–P03 Iteration Arc (2026-04-23)
+
+Three skill-development trials against
+`~/health-data-ai-platform/docs/design/airflow-google-drive-ingestion-*.md`.
+Full detail in `trials/P01`, `P02`, `P03`. Summary:
+
+- **P01** — First trial after Parts A + C merged. Identified two failure
+  modes: (1) security tool tables read as complete specification (bandit
+  picked for a project with Dockerfile + compose surfaces it couldn't
+  cover), and (2) silent scope removal ("for the prototype, DB persistence
+  isn't needed — remove the volume" dropped an approved Phase 1 item).
+  Fixes: Surface Coverage Check, Scope-Removal Triage, two Principles
+  ("Tables are starting points, not terminuses" and "Removals from
+  approved Phase 1 scope are user decisions").
+- **P02** — Second trial after P01 fixes landed. Surface Coverage Check
+  and Scope-Removal Triage held. Review of the generated design doc
+  surfaced three new failure modes: feasibility questions in Deferred
+  Decisions that passed a "difference test" but failed an unstated
+  "assertion test" (e.g., "boto3 upgrade is API-stable"), judgment-call
+  prose indistinguishable from observation prose ("this is the correct
+  behavior"), and conflation of user-approved Phase 1 deferrals with
+  model-designed prototype limitations. Fixes: assertion test as a
+  second triage diagnostic, new `## Scope Deferrals from Phase 1`
+  design-doc section, Judgment vs. Observation Writing Quality
+  subsection, new Principle ("Observation and judgment are labeled
+  distinctly in the design doc").
+- **P03** — Third trial after P02 fixes landed. Security findings
+  handling was exercised for the first time under real CVE escalation
+  (Airflow 2.9.x CVEs → user asks to extend prototype → model upgrades
+  to 3.x → new Critical CVEs via `litellm` transitive dep). The model
+  unilaterally finalized an environmental risk assessment ("we're not
+  running litellm as a public-facing proxy"), chose between only two
+  options (stay or upgrade to 1.83.0), and accepted the new Critical
+  CVEs as the lesser evil without exploring pinning, downgrading, or
+  exclusion. Fixes: severity-indexed Handling Findings subsection,
+  Mitigation Ladder (5 options including downgrade as a first-class
+  move), Environmental Risk Assessment rules (assessments are proposals
+  not decisions; reachability must be addressed specifically; Critical
+  assessments name a condition under which the assessment would be
+  wrong), new Principle ("Security findings get severity-indexed
+  handling, not blanket deferral").
+
+**Cross-cutting meta-pattern from all three trials:** each failure mode is
+a different shape of the same underlying pattern — the model does
+reasoning silently and renders the output as fact-shaped prose. The
+fixes each force a reasoning step into a visible artifact (tool-selection
+table walkthrough, scope-change message, assertion-test confirmation,
+judgment-vs-observation label, mitigation-ladder attempt log,
+environmental-assessment proposal). When a new failure mode surfaces in
+future trials, the diagnostic question is "what reasoning did the model
+do silently that should have been visible?" — the artifact that forces
+visibility is the fix.
 
 ### T14 Run (2026-04-19): 16/17 passed
 
@@ -219,28 +301,51 @@ Four runs on the same 19-task decomposition. Full detail in
     scaffold's `test_command` after bootstrap/lint-tool checks. Catches
     broken `conftest.py`, wrong pytest config, missing pythonpath before
     any real test tasks run. Landed 2026-04-19 after T14.
+37. **Open Questions Triage in Phase 3** — three-bucket classification
+    with two diagnostics (difference test + assertion test). Feasibility
+    questions never ship in the design doc. Landed 2026-04-23 through
+    P01–P03.
+38. **Prototype security-tooling validation in Phase 2** — dep scan
+    (always), secrets scan (always), SAST (with Surface Coverage Check
+    forcing multi-tool selection for prototypes carrying Dockerfile /
+    compose / IaC / shell surfaces). Landed 2026-04-23 through P01.
+39. **Severity-indexed security finding handling** — Critical findings
+    block; all severities attempt fixes before deferral; Mitigation
+    Ladder with 5 options (upgrade, override/pin/downgrade, exclude,
+    replace, accept with compensating controls). Downgrade is a
+    first-class option. Landed 2026-04-23 through P03.
+40. **Environmental Risk Assessment rules** — contextual CVSS reasoning
+    is a proposal to the user, never a unilateral decision. Reachability
+    must be addressed specifically. Critical-severity assessments name
+    a condition under which they would be wrong. Landed 2026-04-23
+    through P03.
+41. **Scope-Removal Triage in Phase 2** — three-bucket classification
+    forcing model-initiated removals of approved Phase 1 items through
+    user review. Mandatory STOP-report bullet. Landed 2026-04-23
+    through P01.
+42. **Scope Deferrals from Phase 1 section in design doc** — separates
+    user-approved out-of-scope items from prototype-design-choice
+    limitations. Landed 2026-04-23 through P02.
+43. **Judgment vs. Observation labeling in design doc** — behavioral
+    claims cite evidence or label as inference; prescriptions carry
+    explicit "Prescribed (not validated)" label. Landed 2026-04-23
+    through P02.
 
-### Planned — Skill Expansion (drafted 2026-04-21)
+### Planned — Remaining Skill Expansion
 
-Full detail in `skill-expansion-plan-2026-04-21.md`. Three parts:
+Part A (Phase 3 Open Questions Triage) and Part C (Phase 2 security
+tooling) from `skill-expansion-plan-2026-04-21.md` landed on 2026-04-23
+through the P01–P03 arc, with scope expansion beyond the original plan
+(severity handling, Mitigation Ladder, Environmental Risk Assessment,
+Judgment vs. Observation, Scope-Removal Triage, Scope Deferrals section).
 
-- **Part A (planning skill):** Phase 3 gains an Open Questions triage
-  step that closes feasibility questions (via prototype-2 loopback) or
-  decisions (via user input) before the design doc is considered final.
-  Section renamed Open Questions → Deferred Decisions with a hard rule:
-  no feasibility questions allowed.
-- **Part B (new skill):** `prototype-driven-roadmap` — one markdown file
-  per component identified in the design doc's Architecture Overview,
-  each with BDD Functional Scenarios and data-flow-scoped Security
-  Scenarios citing ASVS/MASVS requirement IDs. Always required after
-  planning. Markdown + validator script (no Pydantic schema yet).
-- **Part C (planning skill Phase 2):** Prototype security-tooling
-  validation — dependency scan (always), secrets scan (always), SAST
-  (conditional on ecosystem). Feeds a new `### Security Tooling`
-  subsection of the design doc's Tooling section.
-
-Execution order: plan doc → Part C → Part A → Part B → T15 trial.
-Plan doc persisted 2026-04-21 awaiting user review before Part C starts.
+**Part B — `prototype-driven-roadmap` skill — still pending.** Creates
+one markdown file per component identified in the design doc's
+Architecture Overview, each with BDD Functional Scenarios and
+data-flow-scoped Security Scenarios citing ASVS/MASVS requirement IDs.
+Always required after planning. Markdown + validator script (no Pydantic
+schema yet). See `skill-expansion-plan-2026-04-21.md` § 2.2 and § 5 for
+the Part B plan.
 
 ---
 
@@ -305,22 +410,50 @@ cause: Docker-wrapped test command embedded in task description but
 never copied into pipeline. Led to refactor-plan-2026-04-19: required
 `test_command: str` schema field.
 
+### Planning-skill iterations (P01–P03, 2026-04-23)
+
+Three skill-development trials, not pipeline runs. See `trials/_SUMMARY.md`
+planning-skill iterations section and individual P01/P02/P03 files for
+detail. Summary: each iteration surfaced a distinct failure-mode class
+(table-as-complete-spec + silent scope removal; feasibility-in-disguise +
+judgment-as-fact + Phase-1 scope ambiguity; severity-blind handling +
+environmental-assessment shortcut), and each landed skill fixes the same
+day.
+
 ---
 
 ## Next Steps
 
-- **Skill expansion (plan drafted 2026-04-21).** See
-  `skill-expansion-plan-2026-04-21.md`. Execution order after user
-  sign-off on the plan:
-  1. Part C: Phase 2 security-tooling validation (smallest; lands first
-     so both Part A and Part B can rely on the design-doc Security
-     Tooling subsection).
-  2. Part A: Phase 3 Open Questions triage.
-  3. Part B: new `prototype-driven-roadmap` skill.
-  4. End-to-end trial (T15 or next available).
+- **Part B (roadmap skill).** Only remaining work from
+  `skill-expansion-plan-2026-04-21.md`. Creates a new sibling skill
+  `prototype-driven-roadmap` that consumes a signed-off design doc and
+  produces `docs/roadmap/<feature>/<component>.md` — one markdown file
+  per component identified in the design doc's Architecture Overview,
+  with BDD Functional Scenarios + data-flow-scoped Security Scenarios
+  citing ASVS/MASVS requirement IDs. Always required after planning.
+  Markdown + validator script. Reference: plan doc § 2.2 and § 5.
 
-- **T15 validation run.** Regenerate `tasks/airflow-google-drive-ingestion/tasks.json`
-  under the new schema (which will now fail validation and force the
+- **P04 validation trial (planning skill).** Re-run planning on a new
+  or regenerated feature to confirm the P01–P03 fixes hold together.
+  Acceptance bar:
+  - Surface Coverage Check produces multi-tool SAST selection without
+    user prompting.
+  - No silent scope removals; any removal goes through Scope-Removal
+    Triage message and user confirmation.
+  - Open Questions Triage classifies items using both diagnostics; no
+    feasibility-in-disguise items survive in Deferred Decisions.
+  - Design doc's Scope Deferrals from Phase 1 section is populated (or
+    explicitly reads "None").
+  - Judgment vs. Observation labels appear on any behavioral claim
+    without prototype evidence.
+  - If any security finding surfaces, it runs through the Mitigation
+    Ladder (not blanket deferral). Critical findings block on user
+    decision after full attempt log; environmental assessments (if any)
+    are proposals not decisions.
+
+- **T15 pipeline validation run.** Regenerate
+  `tasks/airflow-google-drive-ingestion/tasks.json` under the new
+  decomposition schema (which will now fail validation and force the
   decomposer to populate `test_command` on every task). Regenerate the
   pipeline. Run. Acceptance bar:
   - Match T14's 16/17 at minimum.
@@ -331,10 +464,7 @@ never copied into pipeline. Led to refactor-plan-2026-04-19: required
   - Scaffold task-01's test_command runs cleanly against the empty
     scaffold (pytest exit 5, normalized to exit 0 by the
     `|| [ $? -eq 5 ]` suffix).
-  - If the skill expansion (above) lands before T15 runs, T15 doubles as
-    the expansion validation: new planning skill produces a design doc
-    with Security Tooling subsection, no feasibility questions survive,
-    roadmap skill produces per-component BDD files.
+
 - **Manual cleanup**: delete
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
   (tombstone file from bootstrap merge; noted but not confirmed present).
@@ -344,8 +474,11 @@ never copied into pipeline. Led to refactor-plan-2026-04-19: required
 ## Test Run Results (session history)
 
 ### Planning Skill
-- Session `f75b5f43-fd52-4138-87ad-c7c18589fa07` — First test run
-- Session `a7c48f00-b614-4086-a640-b623a00f5a97` — Second test run
+- Session `f75b5f43-fd52-4138-87ad-c7c18589fa07` — First test run (2026-03-28)
+- Session `a7c48f00-b614-4086-a640-b623a00f5a97` — Second test run (2026-03-28)
+- P01 (2026-04-23) — First Part A + C trial
+- P02 (2026-04-23) — Second Part A + C trial (design-doc review)
+- P03 (2026-04-23) — Third Part A + C trial (security-finding handling)
 
 ### Decomposition Skill
 - Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks)
@@ -366,22 +499,23 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ├── gemini_conversation.txt                # Raw Gemini consultation (historical)
 ├── refactor-plan-2026-04-17.md            # T13 refactor (landed in T14)
 ├── refactor-plan-2026-04-19.md            # T14 refactor (landed same day; validates in T15)
-├── skill-expansion-plan-2026-04-21.md     # Expansion plan (drafted; awaiting sign-off)
+├── skill-expansion-plan-2026-04-21.md     # Expansion plan — Parts A+C landed 2026-04-23; Part B pending
 ├── references/
 │   ├── architecture-rationale.md
 │   └── stack-reference.md
 └── trials/
-    ├── _SUMMARY.md                        # Scoreboard (read third)
+    ├── _SUMMARY.md                        # Scoreboard (read third) — includes planning-skill iterations section
     ├── _INDEX.md
-    └── T<NN>-<slug>.md
+    ├── T<NN>-<slug>.md                    # Pipeline trials (implementation skill)
+    └── P<NN>-<slug>.md                    # Planning-skill iterations (2026-04-23 arc)
 
 ~/claude-devtools/skills/prototype-driven-planning/
-├── SKILL.md
+├── SKILL.md                               # Updated 2026-04-23: Parts A+C and P01-P03 expansions
 └── references/
-    ├── design-doc-template.md             # Includes Tooling section
+    ├── design-doc-template.md             # Updated 2026-04-23: Scope Deferrals from Phase 1, Security Tooling, Deferred Decisions rename
     ├── phase-1-discovery.md
-    ├── phase-2-prototype.md               # Includes auto-fix discovery
-    └── phase-3-design-doc.md
+    ├── phase-2-prototype.md               # Updated 2026-04-23: Security Tooling Validation, Scope-Removal Triage, Mitigation Ladder, Environmental Risk Assessment
+    └── phase-3-design-doc.md              # Updated 2026-04-23: Open Questions Triage, assertion test, Judgment vs. Observation
 
 ~/claude-devtools/skills/prototype-driven-task-decomposition/
 ├── SKILL.md                               # Updated 2026-04-19: test_command field
@@ -414,6 +548,8 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     ├── langgraph-patterns.md              # State machine design reference
     ├── executor-integration.md            # Executor dispatch and prompt composition
     └── phase-3-handoff.md                 # Updated 2026-04-19: reverse task-ID coverage check
+
+~/claude-devtools/skills/prototype-driven-roadmap/  (planned — Part B pending)
 
 ~/claude-devtools/commands/
 ├── prototype-plan.md
