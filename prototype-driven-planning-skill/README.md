@@ -7,11 +7,14 @@
 > - `~/claude-devtools/skills/prototype-driven-planning/`
 > - `~/claude-devtools/skills/prototype-driven-task-decomposition/`
 > - `~/claude-devtools/skills/prototype-driven-implementation/`
+> - `~/claude-devtools/skills/prototype-driven-roadmap/` (planned; see
+>   `skill-expansion-plan-2026-04-21.md`)
 >
 > **Commands**:
 > - `/prototype-plan <feature>` → planning skill
 > - `/prototype-task-decompose <design-doc>` → decomposition skill
 > - `/prototype-implement <feature>` → implementation skill
+> - `/prototype-roadmap <feature>` → roadmap skill (planned)
 >
 > **Test project**: `~/health-data-ai-platform` (airflow Google Drive ingestion)
 
@@ -32,6 +35,10 @@ Load on-demand only when needed:
 - `trials/T<NN>-*.md` — individual trial detail (read when analyzing a specific trial)
 - `refactor-plan-2026-04-17.md` — T13 refactor plan (landed in T14)
 - `refactor-plan-2026-04-19.md` — T14 refactor plan (landed same day; validates in T15)
+- **`skill-expansion-plan-2026-04-21.md`** — **active plan**. Closed open
+  questions in planning, new `prototype-driven-roadmap` skill, prototype
+  security-tooling validation. Not yet landed. Read this when resuming work
+  on the expansion.
 
 ---
 
@@ -213,6 +220,28 @@ Four runs on the same 19-task decomposition. Full detail in
     broken `conftest.py`, wrong pytest config, missing pythonpath before
     any real test tasks run. Landed 2026-04-19 after T14.
 
+### Planned — Skill Expansion (drafted 2026-04-21)
+
+Full detail in `skill-expansion-plan-2026-04-21.md`. Three parts:
+
+- **Part A (planning skill):** Phase 3 gains an Open Questions triage
+  step that closes feasibility questions (via prototype-2 loopback) or
+  decisions (via user input) before the design doc is considered final.
+  Section renamed Open Questions → Deferred Decisions with a hard rule:
+  no feasibility questions allowed.
+- **Part B (new skill):** `prototype-driven-roadmap` — one markdown file
+  per component identified in the design doc's Architecture Overview,
+  each with BDD Functional Scenarios and data-flow-scoped Security
+  Scenarios citing ASVS/MASVS requirement IDs. Always required after
+  planning. Markdown + validator script (no Pydantic schema yet).
+- **Part C (planning skill Phase 2):** Prototype security-tooling
+  validation — dependency scan (always), secrets scan (always), SAST
+  (conditional on ecosystem). Feeds a new `### Security Tooling`
+  subsection of the design doc's Tooling section.
+
+Execution order: plan doc → Part C → Part A → Part B → T15 trial.
+Plan doc persisted 2026-04-21 awaiting user review before Part C starts.
+
 ---
 
 ## Pipeline Run History
@@ -280,6 +309,16 @@ never copied into pipeline. Led to refactor-plan-2026-04-19: required
 
 ## Next Steps
 
+- **Skill expansion (plan drafted 2026-04-21).** See
+  `skill-expansion-plan-2026-04-21.md`. Execution order after user
+  sign-off on the plan:
+  1. Part C: Phase 2 security-tooling validation (smallest; lands first
+     so both Part A and Part B can rely on the design-doc Security
+     Tooling subsection).
+  2. Part A: Phase 3 Open Questions triage.
+  3. Part B: new `prototype-driven-roadmap` skill.
+  4. End-to-end trial (T15 or next available).
+
 - **T15 validation run.** Regenerate `tasks/airflow-google-drive-ingestion/tasks.json`
   under the new schema (which will now fail validation and force the
   decomposer to populate `test_command` on every task). Regenerate the
@@ -292,6 +331,10 @@ never copied into pipeline. Led to refactor-plan-2026-04-19: required
   - Scaffold task-01's test_command runs cleanly against the empty
     scaffold (pytest exit 5, normalized to exit 0 by the
     `|| [ $? -eq 5 ]` suffix).
+  - If the skill expansion (above) lands before T15 runs, T15 doubles as
+    the expansion validation: new planning skill produces a design doc
+    with Security Tooling subsection, no feasibility questions survive,
+    roadmap skill produces per-component BDD files.
 - **Manual cleanup**: delete
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
   (tombstone file from bootstrap merge; noted but not confirmed present).
@@ -323,6 +366,7 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ├── gemini_conversation.txt                # Raw Gemini consultation (historical)
 ├── refactor-plan-2026-04-17.md            # T13 refactor (landed in T14)
 ├── refactor-plan-2026-04-19.md            # T14 refactor (landed same day; validates in T15)
+├── skill-expansion-plan-2026-04-21.md     # Expansion plan (drafted; awaiting sign-off)
 ├── references/
 │   ├── architecture-rationale.md
 │   └── stack-reference.md
