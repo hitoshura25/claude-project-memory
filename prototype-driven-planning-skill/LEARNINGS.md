@@ -439,6 +439,85 @@ fix.
   command without being in the set, or vice versa. Fusing them would
   conflate "what runs" with "how success is judged."
 
+## From Roadmap Skill (Design Pass, 2026-04-24)
+
+The `prototype-driven-roadmap` skill landed in a single build pass on
+2026-04-24, ahead of any pipeline trial. The learnings below are
+design-time — what the skill-creation discussion surfaced — rather than
+trial-time. Trial-based learnings will be added once the skill runs
+against a real design doc.
+
+- **A speculative enum is worse than no field.** The original plan
+  included a `component_type` enum with 10 values (ingestor, parser,
+  publisher, DAG, orchestrator, scaffold, UI-screen, service, library,
+  infrastructure). Auditing the list against "would this work for any
+  project" surfaced two project-biased values (DAG is Airflow-shaped;
+  UI-screen is mobile/GUI-shaped) and raised a deeper question: why
+  pick a taxonomy now, before the skill has run on anything but an
+  Airflow project? Every enum value is a guess about what future
+  projects will need. Free-form strings would avoid the bias but
+  introduce drift (`parser` vs `Parser` vs `SQLite parser`). The
+  resolution was to drop the field entirely. The slug identifies, the
+  display name labels, the purpose paragraph describes — no
+  speculative taxonomy needed. This matches the "promote to schema
+  when a real bug forces it" rule applied in reverse: don't introduce
+  a field that doesn't drive any behavior yet.
+
+- **A persisted Phase 1 → Phase 2 handoff artifact is worth the
+  complexity.** The plan's original design had Phase 1 surface a
+  proposed component-and-data-flow mapping as a chat message, then
+  Phase 2 generate files from "the approved mapping." That's a
+  handoff via the conversation transcript, which breaks if the
+  session hits a context limit mid-generation or the user resumes in
+  a new conversation. Introducing `components.yml` as an authoritative
+  registry written at the end of Phase 1 makes the handoff parseable.
+  The cost is modest (one more file, one more validator check); the
+  benefit is resumability and a clear answer to "where does this
+  component list come from if Phase 2 and Phase 3 disagree?"
+
+- **Precondition checks should be structural, not semantic.** The
+  original plan included regex heuristics over the design doc's
+  Deferred Decisions content looking for feasibility-question patterns
+  ("starting with 'Can we…', 'Does the library support…', etc."). The
+  argument for cutting this: it re-implements the planning skill's
+  Open Questions Triage as a downstream sanity check, which duplicates
+  a responsibility that belongs upstream. The roadmap skill now checks
+  section *names* only (Architecture Overview → Components, Tooling →
+  Security Tooling, Deferred Decisions). If the upstream skill's
+  Phase 3 discipline held, the input is clean; if it didn't, the fix
+  is upstream, not here. This is the same pattern as the Upstream-Only
+  Rule at the bottom of this file, applied across skills rather than
+  across projects.
+
+- **When two fields could drift, pick one as authoritative and
+  validate the other matches.** A roadmap file's frontmatter has a
+  `depends_on: [<slugs>]` list; the `## Dependencies` section has
+  one bullet per slug with rationale prose. Maintaining both as
+  parallel sources of truth invites the `test_command` drift pattern
+  from T14 (prose in one place, derived value elsewhere, they
+  disagree silently). The resolution: frontmatter `depends_on` is
+  authoritative; the prose carries rationale only; the validator
+  checks the two sets of slugs match exactly. Neither field can be
+  edited independently without the other breaking.
+
+- **"Silence is not allowed" as a template rule transfers cleanly.**
+  The P02 Scope Deferrals pattern — "if there are no items, write
+  'None — <reason>'; don't leave the section blank" — applies equally
+  well to roadmap files' Out of Scope and Dependencies sections. An
+  empty section reads as "the model didn't think about this." An
+  explicit "None — <reason>" reads as "the model thought about this
+  and it's empty." The validator enforces the distinction.
+
+- **MASVS coverage ships thinner than ASVS and says so.** The ASVS
+  mapping reference was informed by the airflow-gdrive-ingestion
+  prototype and has a worked example. The MASVS reference has neither
+  — no mobile feature has run through the skill yet. Instead of
+  quietly shipping a thinner MASVS as if it were equivalent, the
+  reference explicitly flags its unvalidated status and lists what
+  future mobile trials should revise. This is observation-vs-judgment
+  labeling from P02 applied to reference documentation.
+
+
 ## From Prior Skill Set (49 Trials)
 
 - LLM non-determinism makes "Big Design Up Front" a losing strategy.

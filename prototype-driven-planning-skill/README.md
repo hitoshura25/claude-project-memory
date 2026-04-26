@@ -7,14 +7,13 @@
 > - `~/claude-devtools/skills/prototype-driven-planning/`
 > - `~/claude-devtools/skills/prototype-driven-task-decomposition/`
 > - `~/claude-devtools/skills/prototype-driven-implementation/`
-> - `~/claude-devtools/skills/prototype-driven-roadmap/` (planned; see
->   `skill-expansion-plan-2026-04-21.md` Part B)
+> - `~/claude-devtools/skills/prototype-driven-roadmap/`
 >
 > **Commands**:
 > - `/prototype-plan <feature>` → planning skill
 > - `/prototype-task-decompose <design-doc>` → decomposition skill
 > - `/prototype-implement <feature>` → implementation skill
-> - `/prototype-roadmap <feature>` → roadmap skill (planned)
+> - `/prototype-roadmap <feature>` → roadmap skill
 >
 > **Test project**: `~/health-data-ai-platform` (airflow Google Drive ingestion)
 
@@ -36,13 +35,13 @@ Load on-demand only when needed:
 - `trials/P<NN>-*.md` — individual planning-skill iteration detail (P01–P03)
 - `refactor-plan-2026-04-17.md` — T13 refactor plan (landed in T14)
 - `refactor-plan-2026-04-19.md` — T14 refactor plan (landed same day; validates in T15)
-- `skill-expansion-plan-2026-04-21.md` — expansion plan. **Parts A + C landed
-  2026-04-23** after P01–P03 refinement arc. **Part B (roadmap skill) still
-  pending.** Read this for Part B context when that work starts.
+- `skill-expansion-plan-2026-04-21.md` — expansion plan. All parts
+  landed (Parts A + C on 2026-04-23, Part B on 2026-04-24). Historical
+  reference only.
 
 ---
 
-## Current State (2026-04-23)
+## Current State (2026-04-24)
 
 ### Built and Validated
 
@@ -220,6 +219,73 @@ See `refactor-plan-2026-04-19.md` for full plan.
 - Existing `expected_test_failure_modes` field and its validators are
   unchanged.
 
+### Roadmap Skill Build Pass (2026-04-24)
+
+`prototype-driven-roadmap` skill landed in a single build pass. Consumes
+a signed-off design doc + prototype directory, produces
+`docs/roadmap/<feature>/<slug>.md` — one markdown file per component
+from the design doc's Architecture Overview. Each file has frontmatter,
+Purpose, Prototype evidence, Functional Scenarios (Gherkin), Security
+Scenarios (Gherkin with ASVS/MASVS IDs in headings), Out of Scope,
+Dependencies.
+
+**Architecture:**
+
+- **Three phases** with STOPs: Extraction (parse design doc, derive data
+  flows, map to OWASP, generate slugs, write `components.yml` after
+  user approval) → Generation (write one roadmap file per
+  `components.yml` entry) → Validation (run `validate_roadmap.py`,
+  print summary table).
+- **`components.yml` is the Phase 1 → Phase 2 handoff artifact.** A
+  registry file at `docs/roadmap/<feature>/components.yml` captures
+  the user-approved component set: slug, display name, depends_on
+  chain, OWASP categories. Phase 2 reads it; Phase 3 validates
+  bidirectional consistency between it and the per-component files.
+- **No `component_type` enum.** Dropped during design rather than ship
+  a taxonomy biased toward the test project (DAG, UI-screen). Slug
+  identifies; display name labels; purpose paragraph describes. No
+  speculative taxonomy.
+- **Slug split from display name.** Frontmatter `component: <slug>`
+  (stable ID) vs `name: <display>` (human text). Slugs auto-generated
+  in Phase 1 from component names; user can override before approval.
+- **Precondition check is structural only.** Verify design doc has
+  `## Architecture Overview → ### Components`, `## Tooling → ###
+  Security Tooling`, `## Deferred Decisions`. No regex heuristics over
+  Deferred Decisions content — that's the planning skill's Phase 3
+  triage responsibility, not this skill's.
+- **Frontmatter `depends_on` is authoritative; `## Dependencies` prose
+  carries rationale only.** Validator checks the two sets of slugs
+  match — avoids the prose-vs-schema drift pattern that bit
+  `test_command` upstream.
+- **OWASP ID validation is format-level, not validity-level.** Regex
+  for `ASVS V<n>.<n>.<n>` and `MASVS-<CATEGORY>-<n>` patterns; no check
+  that the specific ID exists in the pinned OWASP version. Full
+  validation waits for a real bug where a misspelled ID passed review.
+- **MASVS reference ships thinner than ASVS.** ASVS mapping was
+  informed by the airflow prototype; MASVS has no mobile trial yet
+  and says so explicitly. Future mobile trial will inform revision.
+
+**Validator (`scripts/validate_roadmap.py`):** pure stdlib + pyyaml,
+runs via `uv run --with pyyaml`. Checks `components.yml` schema,
+bidirectional consistency with `<slug>.md` files, frontmatter
+completeness, scenario structure (all four Given/When/Then/Verified-by
+lines with non-empty content), OWASP ID format in security scenarios,
+dependency consistency (frontmatter ↔ prose ↔ registry), slug format
+and uniqueness, cycle detection in depends_on graph. Exit 0 = PASS
+with summary table; exit 1 = validation failure with line-numbered
+error report; exit 2 = precondition failure (missing directory or
+unparseable `components.yml`).
+
+**Smoke-tested on three scenarios:** minimal valid happy path passes;
+broken input (bad OWASP ID, missing Verified-by, frontmatter/registry
+mismatch, prose/frontmatter dependency mismatch) fails with specific
+line-numbered errors; 3-node cycle detected cleanly.
+
+**Not yet trial-validated:** the first real roadmap skill run against
+the airflow-gdrive-ingestion design doc is still ahead. Expect
+iterations on the reference docs and validator based on what the first
+trial surfaces.
+
 ### T10–T13 Arc (2026-04-16 through 2026-04-17)
 
 Four runs on the same 19-task decomposition. Full detail in
@@ -330,22 +396,62 @@ Four runs on the same 19-task decomposition. Full detail in
     claims cite evidence or label as inference; prescriptions carry
     explicit "Prescribed (not validated)" label. Landed 2026-04-23
     through P02.
+44. **`prototype-driven-roadmap` skill** — new sibling skill that
+    consumes a signed-off design doc and produces one markdown file
+    per component with BDD scenarios and OWASP-cited security
+    scenarios. Three phases with STOPs; `components.yml` as the
+    authoritative Phase 1 → Phase 2 handoff registry; Phase 3
+    validator checks structural rules. Landed 2026-04-24.
+45. **`components.yml` registry pattern** — persisted Phase 1 output
+    that survives session interrupts, is parseable by Phase 2/3, and
+    serves as the two-way consistency anchor for per-file
+    validation. Model for future skills that need a Phase-to-Phase
+    handoff beyond chat history.
+46. **No speculative `component_type` enum** — taxonomy field dropped
+    entirely during design discussion rather than ship values biased
+    toward the test project. Principle: don't introduce fields that
+    don't drive behavior yet. Informs future schema decisions.
+47. **Slug vs display-name split** — roadmap frontmatter has
+    `component: <slug>` (stable ID) separate from `name: <display>`
+    (human label). Same pattern as database PK-vs-label separation;
+    avoids the "is this the filename or the human name" ambiguity
+    that hits when fields do double duty.
+48. **Structural-only precondition checks across skill boundaries** —
+    roadmap skill checks the design doc's section names but does not
+    inspect section content for feasibility patterns. Duplicate
+    checks across skills create ambiguity about which layer owns the
+    responsibility; structural checks at the boundary + semantic
+    checks inside each skill keeps ownership clear.
+49. **OWASP mapping references per standard** — static data-flow-to-
+    category tables pinned to specific OWASP versions (ASVS 4.0.3,
+    MASVS 2.1.0). Curated short-lists of the top 3–5 requirement IDs
+    per data-flow kind. MASVS explicitly marked thinner pending
+    mobile-trial validation.
+50. **Validator smoke-testing during build, not just pre-merge** —
+    three scenarios (happy path, broken input variants, cycle
+    detection) run against the validator before the skill was
+    declared done. Cheap confidence-builder that catches parser
+    bugs before the first real trial.
 
-### Planned — Remaining Skill Expansion
+### Skill Expansion Plan — Complete
 
-Part A (Phase 3 Open Questions Triage) and Part C (Phase 2 security
-tooling) from `skill-expansion-plan-2026-04-21.md` landed on 2026-04-23
-through the P01–P03 arc, with scope expansion beyond the original plan
-(severity handling, Mitigation Ladder, Environmental Risk Assessment,
-Judgment vs. Observation, Scope-Removal Triage, Scope Deferrals section).
+All parts of `skill-expansion-plan-2026-04-21.md` have landed:
 
-**Part B — `prototype-driven-roadmap` skill — still pending.** Creates
-one markdown file per component identified in the design doc's
-Architecture Overview, each with BDD Functional Scenarios and
-data-flow-scoped Security Scenarios citing ASVS/MASVS requirement IDs.
-Always required after planning. Markdown + validator script (no Pydantic
-schema yet). See `skill-expansion-plan-2026-04-21.md` § 2.2 and § 5 for
-the Part B plan.
+- **Part A (Phase 3 Open Questions Triage)** — 2026-04-23, through the
+  P01–P03 arc. Expanded beyond the original plan with the assertion
+  test as a second triage diagnostic, the `## Scope Deferrals from
+  Phase 1` design-doc section, and Judgment vs. Observation labeling.
+- **Part C (Phase 2 security-tooling validation)** — 2026-04-23,
+  through P01 and P03. Expanded with the Surface Coverage Check,
+  severity-indexed finding handling, the 5-option Mitigation Ladder,
+  and Environmental Risk Assessment rules.
+- **Part B (`prototype-driven-roadmap` skill)** — 2026-04-24, single
+  build pass. Expanded with `components.yml` as the handoff registry,
+  dropped `component_type` enum, slug/display-name split, structural-
+  only precondition check.
+
+The plan doc is historical reference only at this point. New skill
+expansions would live in new plan docs.
 
 ---
 
@@ -424,15 +530,6 @@ day.
 
 ## Next Steps
 
-- **Part B (roadmap skill).** Only remaining work from
-  `skill-expansion-plan-2026-04-21.md`. Creates a new sibling skill
-  `prototype-driven-roadmap` that consumes a signed-off design doc and
-  produces `docs/roadmap/<feature>/<component>.md` — one markdown file
-  per component identified in the design doc's Architecture Overview,
-  with BDD Functional Scenarios + data-flow-scoped Security Scenarios
-  citing ASVS/MASVS requirement IDs. Always required after planning.
-  Markdown + validator script. Reference: plan doc § 2.2 and § 5.
-
 - **P04 validation trial (planning skill).** Re-run planning on a new
   or regenerated feature to confirm the P01–P03 fixes hold together.
   Acceptance bar:
@@ -465,6 +562,27 @@ day.
     scaffold (pytest exit 5, normalized to exit 0 by the
     `|| [ $? -eq 5 ]` suffix).
 
+- **First roadmap-skill trial (R01 or equivalent).** Run the
+  roadmap skill against
+  `~/health-data-ai-platform/docs/design/airflow-gdrive-ingestion-2026-04-24.md`.
+  Acceptance bar:
+  - Precondition check passes (all required sections present; no
+    `## Open Questions` section).
+  - Phase 1 extracts the four components (drive-downloader,
+    sqlite-parser, amqp-publisher, airflow-dag) with reasonable
+    slugs and proposes a defensible OWASP category set per
+    component grounded in the design doc's data flows.
+  - `components.yml` is written after user approval and validates
+    against the schema described in `components-yml-format.md`.
+  - Phase 2 produces one `<slug>.md` per component with at least one
+    functional scenario and at least one security scenario each,
+    plus non-empty Purpose, Prototype evidence, Out of Scope,
+    Dependencies.
+  - Phase 3 validator exits 0 and prints the summary table.
+  - File the trial record at `trials/R01-*.md`; update `_SUMMARY.md`
+    and `_INDEX.md`; record any skill fixes in `LEARNINGS.md`'s
+    "From Roadmap Skill" section.
+
 - **Manual cleanup**: delete
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
   (tombstone file from bootstrap merge; noted but not confirmed present).
@@ -488,6 +606,10 @@ day.
 ### Implementation Skill — runs 1–14
 See `trials/_SUMMARY.md` for the canonical scoreboard.
 
+### Roadmap Skill
+- Design pass (2026-04-24) — skill built and validator smoke-tested;
+  no trial run against a real design doc yet.
+
 ---
 
 ## File Map
@@ -499,7 +621,7 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ├── gemini_conversation.txt                # Raw Gemini consultation (historical)
 ├── refactor-plan-2026-04-17.md            # T13 refactor (landed in T14)
 ├── refactor-plan-2026-04-19.md            # T14 refactor (landed same day; validates in T15)
-├── skill-expansion-plan-2026-04-21.md     # Expansion plan — Parts A+C landed 2026-04-23; Part B pending
+├── skill-expansion-plan-2026-04-21.md     # Expansion plan — all parts landed (A+C: 2026-04-23; B: 2026-04-24)
 ├── references/
 │   ├── architecture-rationale.md
 │   └── stack-reference.md
@@ -549,9 +671,21 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     ├── executor-integration.md            # Executor dispatch and prompt composition
     └── phase-3-handoff.md                 # Updated 2026-04-19: reverse task-ID coverage check
 
-~/claude-devtools/skills/prototype-driven-roadmap/  (planned — Part B pending)
+~/claude-devtools/skills/prototype-driven-roadmap/
+├── SKILL.md                               # Landed 2026-04-24: 3-phase contract + Principles
+├── scripts/
+│   └── validate_roadmap.py                # Landed 2026-04-24: bidirectional registry + per-file checks
+└── references/
+    ├── roadmap-item-template.md           # Per-file template (frontmatter + 6 sections)
+    ├── components-yml-format.md           # Phase 1 → Phase 2 handoff registry schema
+    ├── phase-1-extraction.md              # Component extraction + data-flow mapping rules
+    ├── phase-2-generation.md              # Per-file writing rules
+    ├── phase-3-validation.md              # Validator workflow
+    ├── owasp-asvs-mapping.md              # ASVS 4.0.3 data-flow → category reference (worked example)
+    └── owasp-masvs-mapping.md             # MASVS 2.1.0 reference (thinner; unvalidated pending mobile trial)
 
 ~/claude-devtools/commands/
 ├── prototype-plan.md
-└── prototype-task-decompose.md
+├── prototype-task-decompose.md
+└── prototype-roadmap.md                   # Landed 2026-04-24
 ```

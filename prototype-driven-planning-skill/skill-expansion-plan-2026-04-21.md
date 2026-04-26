@@ -1,13 +1,16 @@
 # Skill Expansion Plan — Closed Open Questions, New Roadmap Skill, Prototype Security Tooling
 
-> **⚠️ STATUS (updated 2026-04-23): Parts A + C LANDED. Part B PENDING.**
+> **✅ STATUS (updated 2026-04-24): ALL PARTS LANDED.**
 >
 > Parts A (Open Questions Triage) and C (prototype security-tooling
 > validation) landed on 2026-04-23 through a three-iteration refinement
-> arc (P01–P03 in `trials/`). The landed work expanded beyond the
-> original plan — see below.
+> arc (P01–P03 in `trials/`). Part B (`prototype-driven-roadmap` skill)
+> landed on 2026-04-24 in a single build pass. The landed work expanded
+> beyond the original plan in places — see below.
 >
 > **What landed (beyond original plan scope):**
+>
+> Parts A + C (2026-04-23):
 > - Part A: assertion test added as a 2nd triage diagnostic (P02).
 > - Part C: Surface Coverage Check added — ecosystem SAST table is a
 >   starting point, not a specification (P01).
@@ -22,17 +25,35 @@
 >   removals-are-user-decisions, observation-and-judgment-labeled,
 >   security-findings-severity-indexed, prototype-stays-mutable-during-loopbacks).
 >
-> **Part B (`prototype-driven-roadmap` skill) still pending.** The
-> design as specified in § 2.2 and § 5 of this document remains the
-> intended plan. Parts A and C landing does not change Part B's design —
-> the roadmap skill still consumes a signed-off design doc, produces
-> one markdown file per component, with BDD scenarios and data-flow-
-> scoped ASVS/MASVS security scenarios.
+> Part B (2026-04-24):
+> - Dropped the `component_type` field entirely rather than ship a
+>   speculative enum. Slug + display name + purpose paragraph carry the
+>   identity and taxonomy weight.
+> - Split `component` (slug, stable ID) from `name` (display text) in
+>   both frontmatter and registry — matches PK-vs-label database
+>   convention.
+> - Added `components.yml` as an authoritative Phase 1 → Phase 2
+>   handoff artifact beyond the original plan spec. Reason: long
+>   sessions hitting context limits mid-generation need a parseable
+>   registry to resume from, not a re-derivation from the design doc.
+> - Tightened precondition check from the plan's § 5.7 version — no
+>   regex heuristics over Deferred Decisions content; structural
+>   section-name checks only. Feasibility-pattern detection belongs
+>   in the planning skill's Open Questions Triage, not duplicated
+>   downstream.
+> - Frontmatter `depends_on` is authoritative; `## Dependencies`
+>   prose carries rationale only. Validator checks the two sets of
+>   slugs match. Avoids the `test_command` prose-vs-schema drift
+>   pattern.
+> - Validator smoke-tested on three scenarios (happy path, field-
+>   level failures, dependency-cycle detection). Uses pure stdlib +
+>   pyyaml; runs via `uv run --with pyyaml`.
 >
-> **For current state of the planning skill**, see `README.md` §
-> "Current State" and the P01/P02/P03 trial files. This plan doc
-> remains as a historical reference for Part B's design and for
-> understanding the intent of Parts A and C before they were expanded.
+> **For current state**, see `README.md` § "Current State" and the
+> P01/P02/P03 trial files plus the first roadmap-skill trial when it
+> runs. This plan doc remains as a historical reference for the
+> intent of Parts A, B, and C before they were expanded during
+> implementation.
 
 ---
 
