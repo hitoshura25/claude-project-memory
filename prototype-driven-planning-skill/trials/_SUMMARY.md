@@ -33,6 +33,16 @@ and records the fixes that landed the same day.
 | P02 | 2026-04-23 | airflow-google-drive-ingestion (re-run) | Design-doc review for residual failure modes | Feasibility questions in Deferred Decisions; judgment stated as observation; Phase 1 deferrals conflated with prototype limitations | Assertion test (2nd triage diagnostic); Scope Deferrals from Phase 1 section; Judgment vs. Observation subsection; "Observation and judgment labeled distinctly" Principle |
 | P03 | 2026-04-23 | airflow-google-drive-ingestion (third run) | Security finding handling under real CVEs | Severity-blind deferral; environmental assessment used as shortcut; mitigation space not explored | Severity-indexed handling; Mitigation Ladder (5 options including downgrade); Environmental Risk Assessment rules; "Security findings get severity-indexed handling" Principle |
 
+## Roadmap-skill iterations
+
+These are skill-development iterations against the `prototype-driven-roadmap`
+skill, not pipeline runs.
+
+| Trial | Date | Target | Focus | Failure modes found | Skill changes |
+|-------|------|--------|-------|---------------------|---------------|
+| R01 | 2026-04-26 | airflow-gdrive-ingestion | First real trial after design pass; structural-rule completeness | Cross-component category misplacement (parser V8.1.1 described orchestrator's temp-dir step); validator gap on registry-vs-scenario ID-set parity | Required `**Performed by** <slug>` field on every security scenario with hard exit on file-slug mismatch / registry mismatch / missing field; ID-set parity check between `components.yml` `owasp_categories` and per-file security-scenario headings (hard exit on either-direction mismatch); Phase 1 "Naming the actor for each category" subsection + updated proposal message; Phase 2 "Performed-by-grounded" rule + updated example; new template subsection + new anti-patterns; 2 new Principles in SKILL.md |
+
+
 ---
 
 ## Progression

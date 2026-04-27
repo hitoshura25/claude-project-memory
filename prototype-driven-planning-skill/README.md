@@ -41,7 +41,7 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-24)
+## Current State (2026-04-26)
 
 ### Built and Validated
 
@@ -286,6 +286,51 @@ the airflow-gdrive-ingestion design doc is still ahead. Expect
 iterations on the reference docs and validator based on what the first
 trial surfaces.
 
+### Roadmap Skill R01 (2026-04-26): two fragility classes surfaced and fixed
+
+First real trial against
+`~/health-data-ai-platform/docs/design/airflow-gdrive-ingestion-2026-04-24.md`.
+Full detail in `trials/R01-roadmap-id-parity-and-actor-misplacement.md`.
+Summary:
+
+- Output passed every existing structural rule. Validator exit 0; all
+  four roadmap files structurally complete; component graph clean.
+- **Two fragilities surfaced in review** that the validator could not
+  catch:
+  1. **Cross-component category misplacement.** The parser's V8.1.1
+     scenario described temp-dir-extraction work that the
+     orchestrator (`airflow-dag`) actually performs. Category was
+     correctly chosen for a real concern; it was attached to the
+     consuming component rather than the performing component. No
+     structural validator could catch this without an explicit actor
+     field.
+  2. **Validator gap on registry-vs-scenario ID-set parity.** The
+     validator format-checked OWASP IDs in `components.yml` and in
+     security-scenario headings independently but never compared the
+     sets. A drift like `registry: [V9.2.1]` vs `scenarios:
+     [V9.2.2]` would have passed all checks. R01 didn't produce the
+     drift, but R01 surfaced that it could.
+- **Both fixes landed same day** before R02 attempt:
+  - Required `**Performed by** <slug>` field on every security
+    scenario. Validator hard-exits on missing field, on slug ≠ file
+    component, and on slug not in `components.yml`.
+  - Validator check 17: registry `owasp_categories` set must equal
+    the set of OWASP IDs cited in security-scenario headings. Hard
+    exit on either-direction mismatch.
+  - Phase 1 gains an explicit "Naming the actor for each category"
+    step in the proposal message, so misplacements are caught
+    before user approval.
+  - Reference docs (`roadmap-item-template.md`,
+    `components-yml-format.md`, `phase-1-extraction.md`,
+    `phase-2-generation.md`) and `SKILL.md` updated; two new
+    Principles added.
+- **R01 output discarded.** Per user direction, no patching of
+  existing files — the directory will be removed and R02 run
+  end-to-end on the updated skill.
+- **Validator smoke-tested** on four synthetic cases (happy path,
+  ID drift, missing Performed-by, unregistered actor). All four
+  match expectations.
+
 ### T10–T13 Arc (2026-04-16 through 2026-04-17)
 
 Four runs on the same 19-task decomposition. Full detail in
@@ -432,6 +477,26 @@ Four runs on the same 19-task decomposition. Full detail in
     detection) run against the validator before the skill was
     declared done. Cheap confidence-builder that catches parser
     bugs before the first real trial.
+51. **Required `Performed by` field on security scenarios** —
+    every security scenario declares which component's code
+    performs the action. Validator checks the slug matches the
+    file's component AND is registered in `components.yml`. Forces
+    the actor decision into a visible artifact at scenario-write
+    time; catches cross-component category misplacements that no
+    structural-only validator can. Landed 2026-04-26 after R01.
+52. **Validator ID-set parity check** — the set of OWASP IDs in
+    `components.yml` must equal the set cited in the matching
+    file's security-scenario headings. Either-direction mismatch
+    is a hard error. Closes a fragility gap surfaced (but not
+    triggered) in R01: registry-vs-scenario ID drift was
+    mechanically possible because the validator format-checked
+    each side independently. Landed 2026-04-26 after R01.
+53. **Phase 1 actor-naming step** — the proposal message lists
+    each (component, OWASP category) pair with an explicit
+    `performed by: <slug>` annotation, so the user can move
+    misplaced categories before approving `components.yml`. Same
+    visible-artifact pattern as the planning skill's P01–P03
+    fixes. Landed 2026-04-26 after R01.
 
 ### Skill Expansion Plan — Complete
 
@@ -583,6 +648,42 @@ day.
     and `_INDEX.md`; record any skill fixes in `LEARNINGS.md`'s
     "From Roadmap Skill" section.
 
+  **Status:** Done 2026-04-26. R01 surfaced two fragility classes
+  (cross-component misplacement; validator gap on ID-set parity);
+  fixes landed same day. See "Roadmap Skill R01" section above.
+
+- **R02 validation trial (roadmap skill).** After manually
+  removing `~/health-data-ai-platform/docs/roadmap/airflow-gdrive-ingestion/`
+  (`rm -rf`), re-run the roadmap skill against the same design doc
+  end-to-end on the updated skill. Acceptance bar:
+  - Phase 1's actor-naming step appears in the proposal message;
+    each (component, category) pair lists the performing-component
+    slug.
+  - Phase 1 places V8.1.1 (temp-dir extraction) on `airflow-dag`,
+    not `sqlite-parser` — the specific R01 misplacement does not
+    repeat.
+  - Phase 2 writes a `**Performed by** <slug>` line on every
+    security scenario.
+  - Phase 3 validator exits 0 against the regenerated output.
+  - All four new validator failure modes (missing Performed-by,
+    actor ≠ file slug, actor not in registry, ID-set drift) remain
+    as hard errors with no false positives on a clean run.
+
+- **Refactor prototype-driven-task-decomposition to consume the
+  roadmap.** Currently the decomposition skill reads design doc +
+  prototype directly. After R02 validates the roadmap skill, change
+  decomposition to consume `components.yml` + per-component
+  roadmap files as the primary input, with the design doc as
+  supplementary input for cross-cutting sections (Data Model,
+  Tooling, cross-cutting Deferred Decisions). Open design questions:
+  whether tasks gain a `roadmap_component: <slug>` schema field;
+  whether security considerations on implementation tasks become
+  structured (citing scenarios from the component file by ASVS ID)
+  rather than freeform; whether decomposition becomes
+  per-component or stays feature-as-a-whole. Detailed proposal to
+  be drafted before any skill changes; sequenced after R02 lands
+  cleanly so we're not changing two skills at once.
+
 - **Manual cleanup**: delete
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
   (tombstone file from bootstrap merge; noted but not confirmed present).
@@ -609,6 +710,13 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ### Roadmap Skill
 - Design pass (2026-04-24) — skill built and validator smoke-tested;
   no trial run against a real design doc yet.
+- R01 (2026-04-26) — first real trial. Output passed all existing
+  rules; review surfaced two fragility classes (cross-component
+  category misplacement; validator gap on ID-set parity). Fixes
+  landed same day: required `Performed by` field with full
+  validator coverage; ID-set parity check; Phase 1 actor-naming
+  step. R01 output to be discarded; R02 will validate the fixes
+  end-to-end.
 
 ---
 

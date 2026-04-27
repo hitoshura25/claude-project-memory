@@ -517,6 +517,72 @@ against a real design doc.
   future mobile trials should revise. This is observation-vs-judgment
   labeling from P02 applied to reference documentation.
 
+### From R01 (first roadmap-skill trial, 2026-04-26)
+
+The roadmap skill was run for the first time against a real signed-off
+design doc (`airflow-gdrive-ingestion-2026-04-24.md`) on 2026-04-26.
+Output passed every existing structural rule. Review surfaced two
+distinct fragility classes that were invisible to the validator as it
+stood; both fixes landed same-day before R02.
+
+- **ID-set drift between registry and per-file scenarios is
+  mechanically preventable; prevent it.** The registry's
+  `owasp_categories` list and the set of OWASP IDs cited in the
+  matching roadmap file's security scenario headings are two parallel
+  records of the same data. The validator was format-checking each
+  side independently but never comparing the sets. A drift like
+  `registry: [V9.2.1]` vs `scenarios: [V9.2.2]` would have passed all
+  format checks. The fix is the same pattern the validator already
+  applied to `depends_on` (frontmatter ⇄ prose ⇄ registry): require
+  set equality between the registry and the per-file scenario IDs,
+  hard exit on either-direction mismatch. R01 didn't produce the
+  drift, but R01 surfaced that the drift was possible — closing the
+  gap doesn't require an actual bug. (R01)
+
+- **Cross-component category misplacement is a Phase 1 reasoning
+  fragility; force the actor to be visible in the artifact.** Phase 1
+  picked the right OWASP category (V8.1.1 — data at rest) for a real
+  concern (PII in a temp directory). It then attached the category to
+  the wrong component — the parser, which reads the file the
+  orchestrator created — because the parser is what the concern is
+  *about*. No structural validator can catch this; the scenario is
+  syntactically valid and the category is real. The fix is a required
+  `**Performed by** <slug>` field on every security scenario, plus a
+  validator check that the slug matches the file's component and is
+  registered in `components.yml`. The field forces the placement
+  decision into a visible artifact at scenario-write time. The
+  validator forces the answer to be machine-checkable. Phase 1 also
+  gains an explicit "Naming the actor for each category" step in the
+  proposal message so misplacements are caught before user approval
+  rather than during validation. (R01)
+
+- **The roadmap skill's fragility shape mirrors the planning skill's.**
+  Both R01 fixes are instances of the same pattern the planning-skill
+  P01–P03 arc established: an LLM can reliably do reasoning it has
+  to make visible; it cannot reliably do reasoning it can
+  internalize and shortcut. The Performed-by field makes actor
+  reasoning visible; the ID-set parity check makes registry-vs-
+  scenario reasoning machine-visible. Different surfaces, same
+  underlying remedy. When future roadmap-skill trials surface new
+  failure modes, the diagnostic question stays "what reasoning did
+  the model do silently that should have been made visible?" and
+  "what artifact (field, validator check, proposal-message line)
+  forces it visible?" (R01)
+
+- **A self-review can mis-describe its own findings; the trial record
+  should preserve the correction.** The first review of R01 output
+  claimed there was a "cross-file ASVS ID inconsistency" between
+  `components.yml` and the per-file scenarios. On closer comparison,
+  the IDs matched cleanly across all four files — the actual concern
+  was category placement at component boundaries (different shape,
+  different fix). The self-correction was useful: it led to closing a
+  real validator gap (ID-set parity check) that existed independent
+  of R01's specific findings, while keeping the actor-misplacement
+  fix scoped to what was actually wrong. The trial record preserves
+  the correction explicitly because future review-discipline
+  questions ("is this finding real or am I conflating two things?")
+  benefit from a worked example. (R01)
+
 
 ## From Prior Skill Set (49 Trials)
 
