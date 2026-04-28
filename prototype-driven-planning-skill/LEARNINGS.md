@@ -121,9 +121,68 @@ reasoning into a visible artifact.
   additionally name a condition under which the assessment would be
   wrong, forcing the model to surface its own uncertainty. (P03)
 
+### From Project Setup Component (2026-04-27)
+
+The decomposition-roadmap refactor was paused mid-design when its
+required `roadmap_component` field surfaced an upstream omission: the
+planning skill's `### Components` section captures runtime/architectural
+components only. Project setup (pyproject.toml, Dockerfile, conftest,
+lint config, services compose) had all the structural properties of a
+component (Gherkin'able behaviors, OWASP V14.x categories, real failure
+modes, root position in the dependency graph) but was never enumerated
+as one. The fix landed in the planning skill so downstream skills handle
+scaffold work the same way they handle any other component.
+
+- **The right place to fix a downstream omission is upstream, even
+  when the downstream symptom appears first.** The decomposition refactor
+  could have been completed by special-casing scaffold tasks (virtual
+  slug, `roadmap_component: null`, schema escape hatch). Each of those
+  options would have left a permanent special case in the schema
+  validator for a problem that belongs in the planning skill. The
+  diagnostic question "where is this concern actually born?" reliably
+  surfaces the right layer to fix. The cost is more round-trips
+  (planning trial → roadmap trial → decomposition trial) but the end
+  state has no asymmetries. (Project Setup work, 2026-04-27)
+
+- **Conditional component existence is a binary user-overridable
+  decision, not a model judgment.** Not every feature is greenfield.
+  A feature added to an existing service inherits all of its setup;
+  enumerating a Project Setup component for it would generate scenarios
+  that say "the project's pyproject.toml continues to exist." A feature
+  that creates a new service has all of it for the first time. The
+  decision is greenfield-vs-extending and it has five concrete triggers
+  (new dependency manifest, new container image, new test infrastructure,
+  new lint config, new services orchestration) plus three edge cases.
+  Surfacing the answer as a labeled line at the top of the Phase 1
+  proposal lets the user override before the prototype is built; the
+  binary flows downstream as the presence/absence of the Project Setup
+  component in the design doc. (Project Setup work, 2026-04-27)
+
+- **Components are listed in dependency-graph order (roots first), not
+  narrative order.** Position matters because the components list flows
+  downstream into the roadmap skill's per-component file generation and
+  the decomposition skill's task ordering. Project Setup is always a
+  root when present (everything depends on it; it depends on nothing).
+  Listing it first in `### Components` matches the implementation order
+  a developer or pipeline would execute, and matches the roadmap skill's
+  Phase 1 dependency-graph display convention. Reading order follows
+  implementation order, consistent end-to-end. (Project Setup work,
+  2026-04-27)
+
+- **Don't introduce a metadata flag when presence/absence of a structural
+  artifact is the same signal.** Considered: a one-line greenfield-vs-
+  extending flag in the design doc prelude. Rejected because the presence
+  or absence of the Project Setup component in `### Components` is
+  itself the signal downstream skills read. A flag would duplicate the
+  answer in two places — exactly the prose-vs-schema drift class the
+  skill arc otherwise rejects. The principle generalizes: when a
+  structural artifact already encodes the decision, an additional flag
+  encoding the same decision is not redundancy-for-safety, it's a
+  drift surface. (Project Setup work, 2026-04-27)
+
 ### Cross-cutting meta-pattern from P01–P03
 
-The six lessons above share a single underlying pattern: **an LLM can
+The lessons above share a single underlying pattern: **an LLM can
 reliably do reasoning it has to make visible; it cannot reliably do
 reasoning it can internalize and shortcut.** The skill's job is to force
 visibility at every boundary where judgment replaces observation.
@@ -133,7 +192,8 @@ Scope-Removal Triage makes scope-change reasoning visible. The assertion
 test makes deferral-classification reasoning visible. Judgment vs.
 Observation makes prose-level claims visible. The Mitigation Ladder makes
 security-mitigation reasoning visible. Environmental Risk Assessment rules
-make contextual-risk reasoning visible.
+make contextual-risk reasoning visible. The Project Setup decision makes
+greenfield-vs-extending reasoning visible.
 
 When a new failure mode emerges, the useful question is not "what rule
 prevents this?" but "what reasoning did the model do silently that should

@@ -38,18 +38,34 @@ Load on-demand only when needed:
 - `skill-expansion-plan-2026-04-21.md` — expansion plan. All parts
   landed (Parts A + C on 2026-04-23, Part B on 2026-04-24). Historical
   reference only.
+- `decomposition-roadmap-refactor-plan-2026-04-26.md` — plan for the
+  decomposition skill to consume roadmap output. Implementation paused
+  pending the upstream Project Setup work below; load this file before
+  resuming that work.
+- `planning-project-setup-component-plan-2026-04-27.md` — plan for adding
+  a Project Setup decision and component to the planning skill.
+  Implementation landed 2026-04-27. Load this file when validating P05 or
+  iterating on the rule.
 
 ---
 
-## Current State (2026-04-26)
+## Current State (2026-04-27)
 
 ### Built and Validated
 
 **prototype-driven-planning** — 3 phases (Discovery → Tracer Bullet → Design Doc)
 with mandatory pauses. Major expansion landed 2026-04-23 after a
-three-iteration refinement arc (P01–P03):
+three-iteration refinement arc (P01–P03). Project Setup component
+addition landed 2026-04-27 (validates in P05):
 
-- **Phase 2** now includes prototype security-tooling validation (dep
+- **Phase 1** now requires a project-setup status decision (greenfield vs
+  extending) before mapping integration boundaries. Greenfield = the
+  feature creates a new service directory, container image, test
+  infrastructure, lint config, or local-services orchestration. Extending
+  = the feature inherits the parent project's setup. The decision
+  surfaces as a labeled answer at the top of the prototype proposal so
+  the user can override before Phase 2 begins.
+- **Phase 2** includes prototype security-tooling validation (dep
   scan, secrets scan, SAST) with a Surface Coverage Check that forces
   multi-tool selection for prototypes carrying multiple surfaces
   (Dockerfile, compose, IaC, shell). Security findings are handled via
@@ -61,30 +77,107 @@ three-iteration refinement arc (P01–P03):
   removals of approved Phase 1 items through a three-bucket classification
   (User-confirmed / Requires user decision / Must be validated) with a
   mandatory STOP-report bullet.
-- **Phase 3** has a new Open Questions Triage step before the final STOP.
+- **Phase 3** has an Open Questions Triage step before the final STOP.
   Every open item goes through two diagnostics (difference test AND
   assertion test) and is classified into three buckets (Resolved by user
   decision / Requires prototype extension / Deferred to implementation).
   The `## Open Questions` section in the design-doc template was renamed
   `## Deferred Decisions` with a hard rule: no feasibility questions
   allowed.
-- **Phase 3** Writing Quality section now has a **Judgment vs. Observation**
+- **Phase 3** Writing Quality section has a **Judgment vs. Observation**
   subsection with explicit labeling rules for behavioral claims (`Not
   observed — based on inference`) and prescriptions (`Prescribed (not
   validated)`).
-- **Design-doc template** now has a `## Scope Deferrals from Phase 1`
+- **Phase 3** has a **Project Setup component rule**: when Phase 1
+  declared greenfield, the design doc's `### Components` section must
+  include a Project Setup entry as the first component, with content
+  derived from Phase 2's toolchain validation outputs (the `## Tooling`
+  section). When Phase 1 declared extending, the component is omitted —
+  the absence is the signal to downstream skills. The same Judgment-vs-
+  Observation rules apply.
+- **Design-doc template** has a `## Scope Deferrals from Phase 1`
   section separating user-approved out-of-scope items from
   prototype-design-choice limitations. Silence is not an allowed outcome
   — the section reads `None — all Phase 1 scope was validated` when
-  empty.
+  empty. The `### Components` template now includes the Project Setup
+  entry pattern (greenfield only).
 
 **prototype-driven-task-decomposition** — 3 phases (Analysis → Task Generation →
 Validation/Output). Produces `tasks/<feature>/tasks.json` with strict TDD
 pairing and per-task `test_command` enforced by PydanticAI schema validators.
+Refactor to consume roadmap output is sequenced after the Project Setup
+work above (see Next Steps).
 
 **prototype-driven-implementation** — LangGraph pipeline with templated stable
 files and verbatim `test_command` copy from the schema. Scaffold verification
 runs bootstrap + lint-tool check + the scaffold's own test_command.
+
+**prototype-driven-roadmap** — Validated end-to-end via R01 (surfaced
+fragility) and R02 (validated fixes). See "Roadmap Skill R01/R02" below.
+After P05/R03 land the Project Setup component, an additional run will
+confirm no roadmap-skill changes are needed for project-setup.md
+generation.
+
+### Planning Skill Project Setup Component (2026-04-27)
+
+Surfaced during the decomposition-roadmap refactor work. The refactor
+required scaffold tasks to declare a `roadmap_component`, and the
+existing roadmap had no scaffold component to reference. Two options:
+special-case scaffold in the decomposition schema, or fix the omission
+upstream so scaffold becomes a real component.
+
+**Root-cause analysis traced the omission to the planning skill.** The
+planning skill's `### Components` section captures runtime/architectural
+components only; project-setup concerns (pyproject.toml, Dockerfile,
+conftest, lint config, services compose) have all the structural
+properties of a component (Gherkin'able behaviors, OWASP V14.x
+categories, real failure modes, root position in the dependency graph)
+but were never enumerated as one. The omission was not an explicit
+exclusion — the design doc template just shaped Components as runtime
+only.
+
+**Project setup is also conditional.** Features extending an existing
+service inherit setup from the parent and do not need a Project Setup
+component. Features creating new services do. The skill needs to make
+the decision visibly, not always emit a Project Setup component.
+
+**Fix landed (2026-04-27):**
+
+- `phase-1-discovery.md` — new "Determine Project-Setup Status"
+  section between Project Inventory and Identifying Integration
+  Boundaries. Five greenfield triggers (new dependency manifest, new
+  container image, new test infrastructure, new lint config, new
+  services orchestration) and one extending criterion. Three edge
+  cases documented (monorepo, new tooling added, new Dockerfile
+  reusing else). Proposal template gains a labeled "Project setup"
+  line at the top.
+- `phase-3-design-doc.md` — new "Project Setup component rule"
+  subsection in the section-by-section guidance. When greenfield,
+  the design doc's `### Components` MUST include a Project Setup
+  entry as the first component. When extending, MUST NOT. Same
+  Judgment-vs-Observation rules apply.
+- `design-doc-template.md` — `### Components` template gains the
+  Project Setup entry pattern (Responsibility / Prototype evidence /
+  Production considerations) for greenfield features. `## Tooling`
+  gains a note clarifying that when a Project Setup component is
+  present, Tooling and the component are two views of the same
+  truth, with Tooling as the source-of-truth for downstream
+  pipelines.
+- `SKILL.md` — Phase 1 step list gains the project-setup decision as
+  Step 2 (between "Inventory the project" and "Map integration
+  boundaries"); proposal-message description updated; Phase 3
+  generate-the-design-doc step references the new rule.
+
+**Cross-cutting pattern note:** This work follows the same shape as
+P01–P03 and R01 — force the model's reasoning into a visible,
+machine-checkable artifact. The decision is "greenfield or extending?"
+and surfaces as a labeled answer the user can override. The presence/
+absence of the Project Setup component in the design doc is the
+downstream-readable signal; no flag in metadata duplicates the answer.
+
+**Validation pending:** P05 trial against the airflow-gdrive-ingestion
+feature (or another) will confirm the rule and template work end-to-end.
+See Next Steps.
 
 ### Planning Skill P01–P03 Iteration Arc (2026-04-23)
 
@@ -137,7 +230,9 @@ judgment-vs-observation label, mitigation-ladder attempt log,
 environmental-assessment proposal). When a new failure mode surfaces in
 future trials, the diagnostic question is "what reasoning did the model
 do silently that should have been visible?" — the artifact that forces
-visibility is the fix.
+visibility is the fix. The Project Setup component fix (2026-04-27)
+extends the pattern: "is this greenfield or extending?" was being
+internalized silently because the design-doc template never asked it.
 
 ### T14 Run (2026-04-19): 16/17 passed
 
@@ -281,11 +376,6 @@ broken input (bad OWASP ID, missing Verified-by, frontmatter/registry
 mismatch, prose/frontmatter dependency mismatch) fails with specific
 line-numbered errors; 3-node cycle detected cleanly.
 
-**Not yet trial-validated:** the first real roadmap skill run against
-the airflow-gdrive-ingestion design doc is still ahead. Expect
-iterations on the reference docs and validator based on what the first
-trial surfaces.
-
 ### Roadmap Skill R01 (2026-04-26): two fragility classes surfaced and fixed
 
 First real trial against
@@ -325,11 +415,29 @@ Summary:
     `phase-2-generation.md`) and `SKILL.md` updated; two new
     Principles added.
 - **R01 output discarded.** Per user direction, no patching of
-  existing files — the directory will be removed and R02 run
+  existing files — the directory was removed and R02 run
   end-to-end on the updated skill.
 - **Validator smoke-tested** on four synthetic cases (happy path,
   ID drift, missing Performed-by, unregistered actor). All four
   match expectations.
+
+### Roadmap Skill R02 (2026-04-27): R01 fixes validated
+
+Re-run of the roadmap skill against the same design doc on the
+updated skill. Output:
+`~/health-data-ai-platform/docs/roadmap/airflow-gdrive-ingestion/`
+contains `components.yml` plus `drive-downloader.md`,
+`sqlite-parser.md`, `amqp-publisher.md`, `airflow-dag.md`. The
+specific R01 misplacement (V8.1.1 on parser) does not repeat — the
+temp-dir-extraction concern is correctly placed on `drive-downloader`
+in the R02 output, with the `**Performed by** drive-downloader`
+field explicitly declared.
+
+R02 output is the canonical input shape for the downstream
+decomposition refactor (see Next Steps). R02 will need an additional
+run after the Project Setup component lands in the planning skill,
+since the design doc input will gain a Project Setup component to
+generate a fifth roadmap file.
 
 ### T10–T13 Arc (2026-04-16 through 2026-04-17)
 
@@ -497,6 +605,22 @@ Four runs on the same 19-task decomposition. Full detail in
     misplaced categories before approving `components.yml`. Same
     visible-artifact pattern as the planning skill's P01–P03
     fixes. Landed 2026-04-26 after R01.
+54. **Project setup decision in planning Phase 1** — binary
+    greenfield-vs-extending decision with five concrete triggers and
+    three edge cases. Surfaces as a labeled answer at the top of the
+    Phase 1 prototype proposal so the user can override before Phase 2.
+    Landed 2026-04-27 (validates in P05).
+55. **Project Setup component in design doc (greenfield only)** —
+    when Phase 1 declares greenfield, the design doc's `### Components`
+    section MUST include a Project Setup entry as the first component,
+    derived from Phase 2's toolchain validation outputs. When extending,
+    the component is omitted and the absence is the downstream signal.
+    Same Judgment-vs-Observation rules apply. Landed 2026-04-27.
+56. **Component ordering follows implementation order** — design doc's
+    `### Components` lists components in dependency-graph order (roots
+    first), consistent with the roadmap skill's Phase 1 message
+    ordering. Project Setup is always a root when present. Landed
+    2026-04-27.
 
 ### Skill Expansion Plan — Complete
 
@@ -516,7 +640,8 @@ All parts of `skill-expansion-plan-2026-04-21.md` have landed:
   only precondition check.
 
 The plan doc is historical reference only at this point. New skill
-expansions would live in new plan docs.
+expansions live in new plan docs (e.g.,
+`planning-project-setup-component-plan-2026-04-27.md`).
 
 ---
 
@@ -595,29 +720,84 @@ day.
 
 ## Next Steps
 
-- **P04 validation trial (planning skill).** Re-run planning on a new
-  or regenerated feature to confirm the P01–P03 fixes hold together.
-  Acceptance bar:
-  - Surface Coverage Check produces multi-tool SAST selection without
-    user prompting.
-  - No silent scope removals; any removal goes through Scope-Removal
-    Triage message and user confirmation.
-  - Open Questions Triage classifies items using both diagnostics; no
-    feasibility-in-disguise items survive in Deferred Decisions.
-  - Design doc's Scope Deferrals from Phase 1 section is populated (or
-    explicitly reads "None").
-  - Judgment vs. Observation labels appear on any behavioral claim
-    without prototype evidence.
-  - If any security finding surfaces, it runs through the Mitigation
-    Ladder (not blanket deferral). Critical findings block on user
-    decision after full attempt log; environmental assessments (if any)
-    are proposals not decisions.
+- **P05 validation trial (planning skill, project-setup component).**
+  Re-run the planning skill against the airflow-gdrive-ingestion feature
+  (or another) to validate the Project Setup component rule end-to-end.
+  Two options for execution:
+  - Re-run the full planning skill on the existing prototype. Phase 1
+    declares greenfield, Phase 3 emits a Project Setup component as the
+    first entry in `### Components`. Higher cost but exercises the full
+    skill loop.
+  - Manually amend the existing
+    `airflow-gdrive-ingestion-2026-04-24.md` design doc to add the
+    Project Setup component to `### Components`. Lower cost, lower
+    regression risk on existing labeled content. **Decision deferred
+    to the user** at trial time.
 
-- **T15 pipeline validation run.** Regenerate
-  `tasks/airflow-google-drive-ingestion/tasks.json` under the new
-  decomposition schema (which will now fail validation and force the
-  decomposer to populate `test_command` on every task). Regenerate the
-  pipeline. Run. Acceptance bar:
+  Acceptance bar:
+  - Phase 1 proposal includes a labeled "Project setup" line at the
+    top.
+  - When greenfield, `### Components` begins with a Project Setup
+    entry; when extending, no Project Setup entry appears.
+  - The Project Setup entry's Production considerations cite specific
+    prototype evidence, following Judgment-vs-Observation rules. No
+    unbacked claims.
+  - Existing rules (Open Questions Triage, Scope-Removal Triage,
+    Mitigation Ladder, etc.) continue to fire correctly. No
+    regressions.
+  - Amended design doc is readable end-to-end.
+
+  File the trial record at `trials/P05-project-setup-component.md`;
+  update `_SUMMARY.md` and `_INDEX.md`; record any skill fixes in
+  `LEARNINGS.md`'s "From Planning Skill" section.
+
+- **R03 validation trial (roadmap skill, project-setup integration).**
+  After P05 lands the Project Setup component in the airflow-gdrive
+  design doc, re-run the roadmap skill end-to-end. Acceptance bar:
+  - `components.yml` gains a `project-setup` entry as the first
+    component, with `depends_on: []` and OWASP V14.x categories.
+  - A `project-setup.md` file is generated with functional scenarios
+    derived from Phase 2's toolchain validation (e.g., "Given a fresh
+    checkout, when `uv sync` runs, then dependencies install at pinned
+    versions") and security scenarios for the V14.x categories.
+  - The four runtime components from R02 regenerate identically (or
+    the diff is reviewable).
+  - Validator exits 0 against the regenerated output.
+  - If the roadmap skill's `references/owasp-asvs-mapping.md` doesn't
+    cover V14.x adequately, a small reference-doc update lands as
+    part of R03's fix loop.
+
+  File at `trials/R03-project-setup-rollup.md`.
+
+- **Resume the decomposition-roadmap refactor.** After P05 and R03
+  land cleanly, the original
+  `decomposition-roadmap-refactor-plan-2026-04-26.md` resumes — now
+  with `project-setup` as a real registered slug. The plan's §9.1
+  ("scaffold roadmap-component placement awkwardness") is resolved
+  upstream; scaffold tasks reference `roadmap_component:
+  "project-setup"` like any other component. The schema validator
+  needs no special cases.
+
+  Plan revision: before resuming, edit the existing plan's §9.1
+  to mark the awkwardness as "resolved upstream — `project-setup`
+  is a real component when greenfield."
+
+  D01 (decomposition trial against the regenerated roadmap)
+  follows. T15 (pipeline run against the regenerated tasks.json)
+  follows D01.
+
+- **P04 validation trial (planning skill, P01–P03 fixes).** Originally
+  next-up before the project-setup work surfaced. Still on the list:
+  re-run planning on a new or regenerated feature to confirm the
+  P01–P03 fixes hold together. Lower priority than P05 (which exercises
+  more recent code) but worth running before the next major skill
+  iteration. Acceptance bar same as before — Surface Coverage Check
+  multi-tool selection, no silent scope removals, both triage
+  diagnostics, Scope Deferrals section populated, Judgment-vs-
+  Observation labels, Mitigation Ladder for any findings.
+
+- **T15 pipeline validation run.** Sequenced after D01 (which produces
+  the regenerated tasks.json). Acceptance bar:
   - Match T14's 16/17 at minimum.
   - Task-16 passes (services started by Docker-wrapped `test_command`).
   - Task-15 and task-17 test_commands exercise the AST-parse and
@@ -626,63 +806,6 @@ day.
   - Scaffold task-01's test_command runs cleanly against the empty
     scaffold (pytest exit 5, normalized to exit 0 by the
     `|| [ $? -eq 5 ]` suffix).
-
-- **First roadmap-skill trial (R01 or equivalent).** Run the
-  roadmap skill against
-  `~/health-data-ai-platform/docs/design/airflow-gdrive-ingestion-2026-04-24.md`.
-  Acceptance bar:
-  - Precondition check passes (all required sections present; no
-    `## Open Questions` section).
-  - Phase 1 extracts the four components (drive-downloader,
-    sqlite-parser, amqp-publisher, airflow-dag) with reasonable
-    slugs and proposes a defensible OWASP category set per
-    component grounded in the design doc's data flows.
-  - `components.yml` is written after user approval and validates
-    against the schema described in `components-yml-format.md`.
-  - Phase 2 produces one `<slug>.md` per component with at least one
-    functional scenario and at least one security scenario each,
-    plus non-empty Purpose, Prototype evidence, Out of Scope,
-    Dependencies.
-  - Phase 3 validator exits 0 and prints the summary table.
-  - File the trial record at `trials/R01-*.md`; update `_SUMMARY.md`
-    and `_INDEX.md`; record any skill fixes in `LEARNINGS.md`'s
-    "From Roadmap Skill" section.
-
-  **Status:** Done 2026-04-26. R01 surfaced two fragility classes
-  (cross-component misplacement; validator gap on ID-set parity);
-  fixes landed same day. See "Roadmap Skill R01" section above.
-
-- **R02 validation trial (roadmap skill).** After manually
-  removing `~/health-data-ai-platform/docs/roadmap/airflow-gdrive-ingestion/`
-  (`rm -rf`), re-run the roadmap skill against the same design doc
-  end-to-end on the updated skill. Acceptance bar:
-  - Phase 1's actor-naming step appears in the proposal message;
-    each (component, category) pair lists the performing-component
-    slug.
-  - Phase 1 places V8.1.1 (temp-dir extraction) on `airflow-dag`,
-    not `sqlite-parser` — the specific R01 misplacement does not
-    repeat.
-  - Phase 2 writes a `**Performed by** <slug>` line on every
-    security scenario.
-  - Phase 3 validator exits 0 against the regenerated output.
-  - All four new validator failure modes (missing Performed-by,
-    actor ≠ file slug, actor not in registry, ID-set drift) remain
-    as hard errors with no false positives on a clean run.
-
-- **Refactor prototype-driven-task-decomposition to consume the
-  roadmap.** Currently the decomposition skill reads design doc +
-  prototype directly. After R02 validates the roadmap skill, change
-  decomposition to consume `components.yml` + per-component
-  roadmap files as the primary input, with the design doc as
-  supplementary input for cross-cutting sections (Data Model,
-  Tooling, cross-cutting Deferred Decisions). Open design questions:
-  whether tasks gain a `roadmap_component: <slug>` schema field;
-  whether security considerations on implementation tasks become
-  structured (citing scenarios from the component file by ASVS ID)
-  rather than freeform; whether decomposition becomes
-  per-component or stays feature-as-a-whole. Detailed proposal to
-  be drafted before any skill changes; sequenced after R02 lands
-  cleanly so we're not changing two skills at once.
 
 - **Manual cleanup**: delete
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
@@ -698,6 +821,7 @@ day.
 - P01 (2026-04-23) — First Part A + C trial
 - P02 (2026-04-23) — Second Part A + C trial (design-doc review)
 - P03 (2026-04-23) — Third Part A + C trial (security-finding handling)
+- P05 (pending) — Project Setup component trial
 
 ### Decomposition Skill
 - Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks)
@@ -715,8 +839,13 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
   category misplacement; validator gap on ID-set parity). Fixes
   landed same day: required `Performed by` field with full
   validator coverage; ID-set parity check; Phase 1 actor-naming
-  step. R01 output to be discarded; R02 will validate the fixes
-  end-to-end.
+  step.
+- R02 (2026-04-27) — re-run on the updated skill; R01 fixes
+  validated. The specific R01 misplacement (V8.1.1 on parser) does
+  not repeat. Output is the canonical input shape for the
+  decomposition refactor.
+- R03 (pending) — re-run after P05 lands the Project Setup
+  component in the design doc.
 
 ---
 
@@ -724,76 +853,79 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 
 ```
 ~/claude-project-memory/prototype-driven-planning-skill/
-├── README.md                              # This file (read first)
-├── LEARNINGS.md                           # Distilled principles (read second)
-├── gemini_conversation.txt                # Raw Gemini consultation (historical)
-├── refactor-plan-2026-04-17.md            # T13 refactor (landed in T14)
-├── refactor-plan-2026-04-19.md            # T14 refactor (landed same day; validates in T15)
-├── skill-expansion-plan-2026-04-21.md     # Expansion plan — all parts landed (A+C: 2026-04-23; B: 2026-04-24)
+├── README.md                                     # This file (read first)
+├── LEARNINGS.md                                  # Distilled principles (read second)
+├── gemini_conversation.txt                       # Raw Gemini consultation (historical)
+├── refactor-plan-2026-04-17.md                   # T13 refactor (landed in T14)
+├── refactor-plan-2026-04-19.md                   # T14 refactor (landed same day; validates in T15)
+├── skill-expansion-plan-2026-04-21.md            # Expansion plan — all parts landed (A+C: 2026-04-23; B: 2026-04-24)
+├── decomposition-roadmap-refactor-plan-2026-04-26.md  # Decomposition refactor plan (paused pending P05/R03)
+├── planning-project-setup-component-plan-2026-04-27.md # Project Setup component plan (landed 2026-04-27; validates in P05)
 ├── references/
 │   ├── architecture-rationale.md
 │   └── stack-reference.md
 └── trials/
-    ├── _SUMMARY.md                        # Scoreboard (read third) — includes planning-skill iterations section
+    ├── _SUMMARY.md                               # Scoreboard (read third) — includes planning-skill iterations section
     ├── _INDEX.md
-    ├── T<NN>-<slug>.md                    # Pipeline trials (implementation skill)
-    └── P<NN>-<slug>.md                    # Planning-skill iterations (2026-04-23 arc)
+    ├── T<NN>-<slug>.md                           # Pipeline trials (implementation skill)
+    ├── P<NN>-<slug>.md                           # Planning-skill iterations (P01–P03 + future P05)
+    └── R<NN>-<slug>.md                           # Roadmap-skill trials (R01, R02 + future R03)
 
 ~/claude-devtools/skills/prototype-driven-planning/
-├── SKILL.md                               # Updated 2026-04-23: Parts A+C and P01-P03 expansions
+├── SKILL.md                                      # Updated 2026-04-27: Phase 1 step 2 = project-setup status; Phase 3 references new rule
 └── references/
-    ├── design-doc-template.md             # Updated 2026-04-23: Scope Deferrals from Phase 1, Security Tooling, Deferred Decisions rename
-    ├── phase-1-discovery.md
-    ├── phase-2-prototype.md               # Updated 2026-04-23: Security Tooling Validation, Scope-Removal Triage, Mitigation Ladder, Environmental Risk Assessment
-    └── phase-3-design-doc.md              # Updated 2026-04-23: Open Questions Triage, assertion test, Judgment vs. Observation
+    ├── design-doc-template.md                    # Updated 2026-04-27: Project Setup component entry in ### Components; Tooling note
+    ├── phase-1-discovery.md                      # Updated 2026-04-27: Determine Project-Setup Status section; proposal template gains Project setup line
+    ├── phase-2-prototype.md                      # Updated 2026-04-23: Security Tooling Validation, Scope-Removal Triage, Mitigation Ladder, Environmental Risk Assessment
+    └── phase-3-design-doc.md                     # Updated 2026-04-27: Project Setup component rule subsection
 
 ~/claude-devtools/skills/prototype-driven-task-decomposition/
-├── SKILL.md                               # Updated 2026-04-19: test_command field
+├── SKILL.md                                      # Updated 2026-04-19: test_command field
 ├── scripts/
-│   └── task_schema.py                     # Updated 2026-04-19: test_command required + 2 validators
+│   └── task_schema.py                            # Updated 2026-04-19: test_command required + 2 validators
 └── references/
     ├── analysis-guide.md
-    ├── task-writing-guide.md              # Updated 2026-04-19: Task test_command section
-    └── output-format.md                   # Updated 2026-04-19: test_command in examples + checklist
+    ├── task-writing-guide.md                     # Updated 2026-04-19: Task test_command section
+    └── output-format.md                          # Updated 2026-04-19: test_command in examples + checklist
 
 ~/claude-devtools/skills/prototype-driven-implementation/
-├── SKILL.md                               # Updated 2026-04-19: Phase 1/3 and Principles
-├── templates/                             # Verbatim pipeline files (language-agnostic)
-│   ├── run.py                             # Entry point with TeeWriter
-│   ├── pipeline_state.py                  # LangGraph state TypedDicts
-│   ├── graph.py                           # StateGraph, routing, pick/retry/escalate nodes
-│   ├── agent_bridge.py                    # Executor dispatch, subprocess wrappers
-│   ├── requirements.txt                   # langgraph, pydantic
-│   ├── config.py.template                 # Updated 2026-04-19: TASK_TEST_COMMANDS: dict[str, str]
+├── SKILL.md                                      # Updated 2026-04-19: Phase 1/3 and Principles
+├── templates/                                    # Verbatim pipeline files (language-agnostic)
+│   ├── run.py                                    # Entry point with TeeWriter
+│   ├── pipeline_state.py                         # LangGraph state TypedDicts
+│   ├── graph.py                                  # StateGraph, routing, pick/retry/escalate nodes
+│   ├── agent_bridge.py                           # Executor dispatch, subprocess wrappers
+│   ├── requirements.txt                          # langgraph, pydantic
+│   ├── config.py.template                        # Updated 2026-04-19: TASK_TEST_COMMANDS: dict[str, str]
 │   └── nodes/
 │       ├── __init__.py
-│       ├── load_tasks.py                  # Task loading, schema validation
-│       ├── compose_prompt.py.template     # T13 tight system prompt with 3 placeholders
-│       ├── execute_task.py                # Executor dispatch node
-│       ├── verify_task.py                 # Updated 2026-04-19: scaffold runs test_command
-│       └── report.py                      # Final summary
+│       ├── load_tasks.py                         # Task loading, schema validation
+│       ├── compose_prompt.py.template            # T13 tight system prompt with 3 placeholders
+│       ├── execute_task.py                       # Executor dispatch node
+│       ├── verify_task.py                        # Updated 2026-04-19: scaffold runs test_command
+│       └── report.py                             # Final summary
 └── references/
-    ├── phase-1-analysis.md                # Updated 2026-04-19: test_commands come from schema
-    ├── phase-2-generation.md              # Updated 2026-04-19: TASK_TEST_COMMANDS verbatim
-    ├── langgraph-patterns.md              # State machine design reference
-    ├── executor-integration.md            # Executor dispatch and prompt composition
-    └── phase-3-handoff.md                 # Updated 2026-04-19: reverse task-ID coverage check
+    ├── phase-1-analysis.md                       # Updated 2026-04-19: test_commands come from schema
+    ├── phase-2-generation.md                     # Updated 2026-04-19: TASK_TEST_COMMANDS verbatim
+    ├── langgraph-patterns.md                     # State machine design reference
+    ├── executor-integration.md                   # Executor dispatch and prompt composition
+    └── phase-3-handoff.md                        # Updated 2026-04-19: reverse task-ID coverage check
 
 ~/claude-devtools/skills/prototype-driven-roadmap/
-├── SKILL.md                               # Landed 2026-04-24: 3-phase contract + Principles
+├── SKILL.md                                      # Landed 2026-04-24; updated 2026-04-26 with Performed-by Principle
 ├── scripts/
-│   └── validate_roadmap.py                # Landed 2026-04-24: bidirectional registry + per-file checks
+│   └── validate_roadmap.py                       # Landed 2026-04-24; updated 2026-04-26 with check 17 (ID parity) + Performed-by checks
 └── references/
-    ├── roadmap-item-template.md           # Per-file template (frontmatter + 6 sections)
-    ├── components-yml-format.md           # Phase 1 → Phase 2 handoff registry schema
-    ├── phase-1-extraction.md              # Component extraction + data-flow mapping rules
-    ├── phase-2-generation.md              # Per-file writing rules
-    ├── phase-3-validation.md              # Validator workflow
-    ├── owasp-asvs-mapping.md              # ASVS 4.0.3 data-flow → category reference (worked example)
-    └── owasp-masvs-mapping.md             # MASVS 2.1.0 reference (thinner; unvalidated pending mobile trial)
+    ├── roadmap-item-template.md                  # Updated 2026-04-26: Performed-by field, ID parity rule
+    ├── components-yml-format.md                  # Updated 2026-04-26: check 17 + 18
+    ├── phase-1-extraction.md                     # Updated 2026-04-26: actor-naming step
+    ├── phase-2-generation.md                     # Updated 2026-04-26: Performed-by guidance
+    ├── phase-3-validation.md                     # Validator workflow
+    ├── owasp-asvs-mapping.md                     # ASVS 4.0.3 data-flow → category reference (worked example)
+    └── owasp-masvs-mapping.md                    # MASVS 2.1.0 reference (thinner; unvalidated pending mobile trial)
 
 ~/claude-devtools/commands/
 ├── prototype-plan.md
 ├── prototype-task-decompose.md
-└── prototype-roadmap.md                   # Landed 2026-04-24
+└── prototype-roadmap.md                          # Landed 2026-04-24
 ```
