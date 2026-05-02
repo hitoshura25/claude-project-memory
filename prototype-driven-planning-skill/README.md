@@ -52,7 +52,20 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-05-01)
+## Current State (2026-05-02)
+
+> **Recent change (2026-05-02): roadmap skill gains scenario `id`
+> field.** First of three coordinated changes per
+> `decomposition-roadmap-refactor-plan-2026-05-02.md`. Added required
+> `id: str` field to both `FunctionalScenario` and `SecurityScenario`
+> in `roadmap_schema.py`; new `scenario_ids_unique_within_component`
+> model validator rejects duplicates across both lists; reference docs
+> (`roadmap-json-format.md` and `phase-2-generation.md`) updated with
+> the new field, a new "Scenario IDs" subsection, and Phase 2 writing
+> guidance (preserve IDs across regenerations). Schema smoke-tested
+> against 7 cases (happy path + 6 edge cases) — all pass. **Existing
+> roadmap.json files are now invalid** until regenerated with the new
+> field; R03 is the trial that will validate end-to-end regeneration.
 
 > **Recent change (2026-05-01): R02 re-run validates the OWASP spec
 > migration end-to-end.** First project trial against the rebuilt
@@ -86,7 +99,10 @@ scaffold's own test_command. T14 refactor landed 2026-04-19.
 migration form). R01 fixes (Performed-by, ID-set parity check)
 landed 2026-04-26. OWASP spec migration to ASVS 5.0.0 / MASVS 2.1.0
 plus label canonicalization landed 2026-04-30. R02 re-run against
-the rebuilt skill validated 2026-05-01 (clean sweep).
+the rebuilt skill validated 2026-05-01 (clean sweep). Scenario `id`
+field (required, kebab-case, unique-within-component) landed
+2026-05-02 as step 1 of the three-skill decomposition refactor;
+R03 will validate end-to-end regeneration.
 
 ### Roadmap Skill OWASP Spec Migration (2026-04-30)
 
@@ -332,8 +348,10 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - **Three-skill refactor per `decomposition-roadmap-refactor-plan-2026-05-02.md`.**
   Three coordinated changes:
   1. Roadmap skill: add stable `id` field to `FunctionalScenario` and
-     `SecurityScenario`. Validates uniqueness within a component. R03
-     trial.
+     `SecurityScenario`. Validates uniqueness within a component.
+     **Schema and reference doc updates landed 2026-05-02; R03 trial
+     pending (regenerate airflow-gdrive-ingestion roadmap with new
+     IDs and verify end-to-end).**
   2. Implementation skill: `compose_prompt.py.template` gains
      `_inline_roadmap_scenarios` helper and `{{ROADMAP_JSON_PATH}}`
      placeholder. No standalone trial; validated end-to-end by T15.
