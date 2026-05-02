@@ -33,14 +33,18 @@ Load on-demand only when needed:
 - `trials/_INDEX.md`
 - `trials/T<NN>-*.md` — pipeline trials (T01–T14)
 - `trials/P<NN>-*.md` — planning-skill iterations (P01–P03)
-- `trials/R<NN>-*.md` — roadmap-skill trials and rebuilds (R01, R02-prep)
+- `trials/R<NN>-*.md` — roadmap-skill trials and rebuilds (R01, R02-prep, R02)
 - `refactor-plan-2026-04-17.md` — T13 refactor (landed in T14)
 - `refactor-plan-2026-04-19.md` — T14 refactor (landed same day)
 - `skill-expansion-plan-2026-04-21.md` — historical reference; all parts landed
-- `decomposition-roadmap-refactor-plan-2026-04-26.md` — **stale on output
-  format**: references markdown roadmap output and `components.yml`; the
-  roadmap skill now produces JSON. §4.4/§5.1/§7/§9.1 need updates before
-  resuming this work.
+- `decomposition-roadmap-refactor-plan-2026-05-02.md` — **Active plan**
+  for the decomposition refactor. Three coordinated changes (roadmap skill,
+  implementation skill, decomposition skill) producing the full
+  deduplication benefit. Acceptance trials: R03 → D01 → T15.
+- `decomposition-roadmap-refactor-plan-2026-04-26.md` — Superseded
+  2026-05-02. Preserved for historical context (2026-04-27 sequencing
+  pivot, embed-vs-script debate that dissolved when roadmap output
+  became JSON).
 - `planning-project-setup-component-plan-2026-04-27.md` — Project Setup
   component plan (landed 2026-04-27; validates in P05)
 - `asvs-5-migration-plan-2026-04-30.md` — OWASP spec migration plan
@@ -48,20 +52,17 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-04-30)
+## Current State (2026-05-01)
 
-> **Recent change (2026-04-30): roadmap-skill OWASP spec migration +
-> label canonicalization.** Skill is now pinned to ASVS 5.0.0 and
-> MASVS 2.1.0 (verified live at migration time). Spec data files
-> (`scripts/owasp-asvs.json`, `scripts/owasp-masvs.json`) are the
-> single source of truth for canonical category labels and pinned
-> versions; the `owasp_category_label` field has been removed from
-> the schema; ASVS IDs use the version-baked `v5.0.0-1.2.5` form;
-> reference docs speak abstractly about the version pin. Earlier R01
-> and R02 output (using ASVS 4.0.3 IDs and `owasp_category_label`
-> fields) is invalid against the rebuilt skill. R02 will be re-run
-> end-to-end against the rebuilt skill; that re-run is queued. Full
-> detail: `trials/R02-prep-owasp-spec-migration.md`.
+> **Recent change (2026-05-01): R02 re-run validates the OWASP spec
+> migration end-to-end.** First project trial against the rebuilt
+> roadmap skill. All acceptance criteria green: JSON output,
+> ASVS 5.0.0 version-baked IDs, `owasp_category_label` removed,
+> validator clean with Categories Cited footer, R01 placement fix
+> survives, structural rules fire correctly. Project Setup component
+> (P05 work) implicitly exercised. No new failure modes; no skill
+> changes required. Detail:
+> `trials/R02-roadmap-spec-migration-revalidation.md`.
 
 ### Built and Validated
 
@@ -72,8 +73,8 @@ below.
 
 **prototype-driven-task-decomposition** — Required `test_command: str`
 field with two validators landed 2026-04-19 (T14). Refactor to consume
-roadmap output is sequenced after the Project Setup work and post-
-migration R02 re-run.
+roadmap output is the next major work; the prerequisite plan-doc update
+(JSON output references) is the top of the queue.
 
 **prototype-driven-implementation** — LangGraph pipeline with
 templated stable files; verbatim `test_command` copy from the schema;
@@ -85,7 +86,7 @@ scaffold's own test_command. T14 refactor landed 2026-04-19.
 migration form). R01 fixes (Performed-by, ID-set parity check)
 landed 2026-04-26. OWASP spec migration to ASVS 5.0.0 / MASVS 2.1.0
 plus label canonicalization landed 2026-04-30. R02 re-run against
-the rebuilt skill is queued.
+the rebuilt skill validated 2026-05-01 (clean sweep).
 
 ### Roadmap Skill OWASP Spec Migration (2026-04-30)
 
@@ -328,68 +329,25 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 
 ## Next Steps
 
-- **R02 re-run against rebuilt skill (validates 2026-04-30 migration).**
-  Cached output at
-  `~/health-data-ai-platform/docs/roadmap/airflow-gdrive-ingestion/`
-  is invalid against the rebuilt skill. The user clears the
-  directory; Claude re-runs the roadmap skill end-to-end against the
-  existing design doc.
-
-  Acceptance bar:
-  - `components.json` and `roadmap.json` written; ASVS 4.0.3-form IDs
-    converted to `v5.0.0-X.Y.Z` form against the new chapter
-    structure.
-  - No `owasp_category_label` field anywhere in `roadmap.json`.
-  - Validator exits 0 with the new "Categories cited (ASVS 5.0.0):"
-    footer.
-  - The R01 placement fix (V8.1.1-equivalent on the
-    component that performs the action, not the consumer) survives
-    the regeneration.
-  - Existing structural rules (Performed-by, ID-set parity, etc.)
-    continue to fire correctly.
-
-  File the trial record (this becomes the proper "R02"). Update
-  `trials/_SUMMARY.md`, `_INDEX.md`, and this README's Current State.
-
-- **Update `decomposition-roadmap-refactor-plan-2026-04-26.md` for
-  JSON output format.** §4.4, §5.1, §7, §9.1 reference markdown
-  roadmap files and `components.yml`. Need to point at
-  `components.json` / `roadmap.json` and the JSON schemas. Required
-  before resuming the decomposition refactor.
-
-- **P05 validation trial (planning skill, project-setup component).**
-  Re-run the planning skill against the airflow-gdrive-ingestion
-  feature (or another) to validate the Project Setup component rule
-  end-to-end. Two execution options (full re-run vs. manual
-  amendment) deferred to user at trial time. File at
-  `trials/P05-project-setup-component.md`.
-
-- **R03 validation trial (roadmap skill, project-setup integration).**
-  After P05 lands the Project Setup component in the design doc,
-  re-run the roadmap skill end-to-end. Acceptance bar:
-  - `components.json` gains a `project-setup` entry as the first
-    component, with `depends_on: []` and ASVS 5.0+ IDs in OWASP
-    V13/V14/V15 chapters.
-  - A `project-setup` content entry generated in `roadmap.json`
-    with functional scenarios derived from Phase 2's toolchain
-    validation.
-  - The four runtime components from R02 (post-migration re-run)
-    regenerate identically (or the diff is reviewable).
-  - Validator exits 0 against the regenerated output.
-
-  File at `trials/R03-project-setup-rollup.md`.
-
-- **Resume the decomposition-roadmap refactor.** After R02 re-run,
-  P05, R03, and the refactor-plan update land cleanly, resume the
-  original refactor plan with `project-setup` as a real registered
-  slug in `components.json` and the JSON schema as the canonical
-  input shape. D01 (decomposition trial) follows. T15 (pipeline run)
-  follows D01.
+- **Three-skill refactor per `decomposition-roadmap-refactor-plan-2026-05-02.md`.**
+  Three coordinated changes:
+  1. Roadmap skill: add stable `id` field to `FunctionalScenario` and
+     `SecurityScenario`. Validates uniqueness within a component. R03
+     trial.
+  2. Implementation skill: `compose_prompt.py.template` gains
+     `_inline_roadmap_scenarios` helper and `{{ROADMAP_JSON_PATH}}`
+     placeholder. No standalone trial; validated end-to-end by T15.
+  3. Decomposition skill: schema additions (`roadmap_component`,
+     `roadmap_functional_scenarios`, `roadmap_security_scenarios`,
+     `components_json_path`, `roadmap_json_path`); description
+     template change (remove `Behaviors to test:` section); validators.
+     D01 trial.
+  After D01, T15 runs the pipeline against the new decomposition
+  output to confirm scenario inlining works end-to-end.
+  **Top of queue.**
 
 - **P04 validation trial (planning skill, P01–P03 fixes).** Lower
-  priority than P05 but still on the list.
-
-- **T15 pipeline validation run.** Sequenced after D01.
+  priority. Still on the list.
 
 - **Manual cleanup**: delete
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
@@ -405,7 +363,7 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - P01 (2026-04-23) — First Part A + C trial
 - P02 (2026-04-23) — Second Part A + C trial (design-doc review)
 - P03 (2026-04-23) — Third Part A + C trial (security-finding handling)
-- P05 (pending) — Project Setup component trial
+- P05 (2026-05-01) — Project Setup component validation. Done; design doc updated to include Project Setup component as first entry.
 
 ### Decomposition Skill
 - Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks)
@@ -419,12 +377,16 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 - Design pass (2026-04-24) — skill built and validator smoke-tested.
 - R01 (2026-04-26) — first real trial; structural fixes landed same
   day.
-- R02 (2026-04-27) — R01 fixes validated (markdown / ASVS 4.0.3
-  output). **Now invalid against the post-migration skill.**
+- R02 (original, 2026-04-27) — R01 fixes validated (markdown / ASVS
+  4.0.3 output). Now invalid against the post-migration skill.
 - R02-prep (2026-04-30) — skill rebuild for OWASP spec migration.
   Not a project trial.
-- R02 re-run (pending) — exercise the rebuilt skill end-to-end.
-- R03 (pending) — re-run after P05 lands the Project Setup component.
+- R02 re-run (2026-05-01) — first trial against rebuilt skill;
+  clean sweep. Validates the OWASP spec migration end-to-end.
+- R03 (revived, retargeted) — originally queued for Project Setup
+  component validation (which R02 re-run implicitly satisfied).
+  Now retargeted to validate the scenario `id` field addition
+  (per decomposition-roadmap-refactor-plan-2026-05-02.md).
 
 ---
 
