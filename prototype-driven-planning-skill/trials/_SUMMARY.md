@@ -41,6 +41,7 @@ skill, not pipeline runs.
 | Trial | Date | Target | Focus | Failure modes found | Skill changes |
 |-------|------|--------|-------|---------------------|---------------|
 | R01 | 2026-04-26 | airflow-gdrive-ingestion | First real trial after design pass; structural-rule completeness | Cross-component category misplacement (parser V8.1.1 described orchestrator's temp-dir step); validator gap on registry-vs-scenario ID-set parity | Required `**Performed by** <slug>` field on every security scenario with hard exit on file-slug mismatch / registry mismatch / missing field; ID-set parity check between `components.yml` `owasp_categories` and per-file security-scenario headings (hard exit on either-direction mismatch); Phase 1 "Naming the actor for each category" subsection + updated proposal message; Phase 2 "Performed-by-grounded" rule + updated example; new template subsection + new anti-patterns; 2 new Principles in SKILL.md |
+| R02-prep | 2026-04-30 | (skill rebuild; no project run) | OWASP spec migration + label canonicalization triggered by R01-era review | Stale spec-version pin (ASVS 4.0.3 instead of 5.0.0) with "as of <date>" prose claiming verification that was never done; canonical category labels duplicated across 3 artifact types (reference doc prose, per-scenario `owasp_category_label` field, dedicated spec data files) — three drift surfaces for one fact | New `scripts/owasp-asvs.json` and `scripts/owasp-masvs.json` spec data files with `verified_at` / `verified_against` provenance fields; ASVS regex made version-agnostic and pin moved to JSON; `owasp_category_label` field removed from schema; validator loads spec files at runtime, cross-checks version + category prefix, renders Categories Cited footer with canonical titles; reference docs rebuilt for ASVS 5.0's 17-chapter structure and made abstract about version pin; 6 new principles in LEARNINGS.md (live-verification discipline, single-source-of-truth for labels, force-visibility-applies-to-verification, etc.) |
 
 
 ---
@@ -71,6 +72,10 @@ P02 → P03: The assertion test, Scope Deferrals from Phase 1 section, and Judgm
 
 The three trials share a single underlying failure pattern: **an LLM can reliably do reasoning it has to make visible; it cannot reliably do reasoning it can internalize and shortcut.** The fixes across P01–P03 all share the same shape — force the model's reasoning into visible artifacts (Surface Coverage Check output, Scope-Removal Triage message, assertion-test field, Mitigation Ladder attempt log, Environmental assessment proposal) rather than allowing it to appear as fact-shaped prose.
 
+### Roadmap-skill iterations (R01 → R02-prep)
+
+R01 → R02-prep: R01 surfaced two structural fixes (Performed-by field, ID-set parity check) that landed same-day. Subsequent review of the resulting skill artifacts surfaced two architectural issues that R01's findings didn't directly cover but the surrounding-doc review revealed: a stale OWASP version pin (ASVS 4.0.3 — ASVS 5.0.0 had been out 11 months) and a triple-source-of-truth for category labels (reference doc prose + `owasp_category_label` field + dedicated spec data files in the migration plan). The fix package — separate spec data files in the skill, removed `owasp_category_label`, version-baked ID format, runtime version cross-check, `verified_at`/`verified_against` provenance — landed before R02 ran so R02's findings stay scoped to "did the rebuilt skill behave correctly?" not "are the architectural choices correct?" The same "force visibility" pattern from P01–P03 applies: silent verification ("as of <date>") is the same failure shape as silent judgment, and the structural fix is the same — surface the work into a typed artifact that can be inspected and challenged. R02 is queued.
+
 ---
 
 ## Model Standings
@@ -87,6 +92,7 @@ The three trials share a single underlying failure pattern: **an LLM can reliabl
 
 | Skill | Status | Last Validated |
 |-------|--------|----------------|
-| prototype-driven-planning | ✅ Built; Part A + Part C landed 2026-04-23 after 3-iteration refinement arc (P01–P03) | P03 (2026-04-23) — Part B (roadmap) pending |
+| prototype-driven-planning | ✅ Built; Part A + Part C landed 2026-04-23 after 3-iteration refinement arc (P01–P03) | P03 (2026-04-23) |
 | prototype-driven-task-decomposition | ✅ Built; T14-refactor landed 2026-04-19 (test_command required field + validators) | T14 (2026-04-19) |
+| prototype-driven-roadmap | ✅ Built; R01 fixes (Performed-by + ID-set parity) landed 2026-04-26; R02-prep migration to ASVS 5.0 / MASVS 2.1.0 + label canonicalization landed 2026-04-30 | R01 (2026-04-26); R02 pending against rebuilt skill |
 | prototype-driven-implementation | ✅ Built; T14-refactor landed 2026-04-19 (TASK_TEST_COMMANDS verbatim from schema; scaffold runs test_command) | T14 (2026-04-19) |

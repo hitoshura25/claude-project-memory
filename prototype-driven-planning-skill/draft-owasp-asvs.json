@@ -1,0 +1,80 @@
+{
+  "spec": "ASVS",
+  "spec_full_name": "OWASP Application Security Verification Standard",
+  "spec_version": "5.0.0",
+  "spec_release_date": "2025-05",
+  "source_url": "https://github.com/OWASP/ASVS/tree/v5.0.0",
+  "verified_at": "2026-04-30",
+  "verified_against": "https://cheatsheetseries.owasp.org/IndexASVS.html (which states 'This index is based on the version 5.0.x of the ASVS') and https://github.com/OWASP/ASVS README ('Latest Stable Version - 5.0.0, dated May 2025')",
+  "id_format_description": "v<spec_version>-<chapter>.<section>.<requirement>, e.g. 'v5.0.0-1.2.5'. Lowercase 'v' prefix is required. Version prefix is required because identifiers may be renumbered between major versions of the standard.",
+  "categories": {
+    "1": {
+      "title": "Encoding and Sanitization",
+      "id_prefix": "1"
+    },
+    "2": {
+      "title": "Validation and Business Logic",
+      "id_prefix": "2"
+    },
+    "3": {
+      "title": "Web Frontend Security",
+      "id_prefix": "3"
+    },
+    "4": {
+      "title": "API and Web Service",
+      "id_prefix": "4"
+    },
+    "5": {
+      "title": "File Handling",
+      "id_prefix": "5"
+    },
+    "6": {
+      "title": "Authentication",
+      "id_prefix": "6"
+    },
+    "7": {
+      "title": "Session Management",
+      "id_prefix": "7"
+    },
+    "8": {
+      "title": "Authorization",
+      "id_prefix": "8"
+    },
+    "9": {
+      "title": "Self-contained Tokens",
+      "id_prefix": "9"
+    },
+    "10": {
+      "title": "OAuth and OIDC",
+      "id_prefix": "10"
+    },
+    "11": {
+      "title": "Cryptography",
+      "id_prefix": "11"
+    },
+    "12": {
+      "title": "Secure Communication",
+      "id_prefix": "12"
+    },
+    "13": {
+      "title": "Configuration",
+      "id_prefix": "13"
+    },
+    "14": {
+      "title": "Data Protection",
+      "id_prefix": "14"
+    },
+    "15": {
+      "title": "Secure Coding and Architecture",
+      "id_prefix": "15"
+    },
+    "16": {
+      "title": "Security Logging and Error Handling",
+      "id_prefix": "16"
+    },
+    "17": {
+      "title": "WebRTC",
+      "id_prefix": "17"
+    }
+  }
+}

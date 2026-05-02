@@ -643,6 +643,102 @@ stood; both fixes landed same-day before R02.
   questions ("is this finding real or am I conflating two things?")
   benefit from a worked example. (R01)
 
+### From OWASP spec migration (Pre-R02 prep, 2026-04-30)
+
+Before R02 ran, the roadmap skill had two parallel issues that surfaced
+on review of the R01 artifacts: the markdown roadmap output was
+restructured to JSON (separate work, captured in the decomposition-
+roadmap refactor plan), and the OWASP version pin was found to be wrong
+— the skill author had stamped "ASVS 4.0.3 (last major release as of
+2026-04-24)" on the reference docs without checking, when ASVS 5.0.0
+had actually been out since May 2025. The migration to ASVS 5.0.0 +
+MASVS 2.1.0 also surfaced an architectural inconsistency: canonical
+category labels (e.g., "Encoding and Sanitization" for V1) were stored
+in three places at once — embedded in reference docs, written into a
+`owasp_category_label` field per scenario, and (after the migration)
+present in dedicated spec data files. Three sources of the same data
+created three opportunities for drift.
+
+- **"As of <date>" is not verification, it's prose pretending to be
+  verification.** A comment that says "Pinned version: ASVS 4.0.3 (last
+  major release as of 2026-04-24)" looks like a verified pin but does
+  no actual verification work. Any reader (human or LLM) reads the
+  parenthetical as evidence that someone checked; in practice nobody
+  did. The fix is structural: spec data files have explicit
+  `verified_at` (date the pin was last reconciled with the source) and
+  `verified_against` (URL of the source consulted) fields. These force
+  the question "did anyone actually look?" into a visible field that
+  can be wrong, and that can be re-verified. The "as of" comment
+  pattern is now a banned anti-pattern in skill reference files.
+  (Pre-R02)
+
+- **Live search results are the answer, not a footnote.** The same
+  failure pattern caught itself recurring at the start of the
+  migration: a search confirmed ASVS 5.0.0 was current, but the
+  initial response still proposed proceeding with 4.0.3 "to preserve
+  R04 compatibility" — a fictional concern, since R04 was being
+  regenerated as part of this work. When the live result and the
+  training-data assumption disagree on a present-day fact, the live
+  result wins. Treating it as anything else is the same shortcut the
+  P01 Surface Coverage Check was designed to prevent — the model
+  reads the table (or in this case, training-data prior) as the
+  complete answer and skips the verification step. The fix is
+  procedural: when a skill pins an external spec version, run a live
+  search before committing the pin, and let the search outcome be
+  authoritative. (Pre-R02)
+
+- **One source of truth for category labels, derived at output time.**
+  The same canonical title ("Encoding and Sanitization" for V1) was
+  duplicated across reference docs (in prose), per-scenario
+  `owasp_category_label` fields (in JSON), and spec data files (the
+  actual canonical source). Three duplicates of one fact across three
+  artifact types is a drift surface in three dimensions. The fix
+  collapses to one source: the spec data file. Reference docs
+  reference the spec abstractly ("the pinned version"; consult the
+  `source_url`); the `owasp_category_label` field is removed entirely
+  from the schema; the validator's summary footer renders labels at
+  output time by looking them up in the spec data file. Downstream
+  consumers that want the label read it from the same place. This is
+  the same shape as the T14 "prose lossy transport" fix — promote the
+  canonical form to a single typed source, consume it programmatically,
+  delete the parallel forms. (Pre-R02)
+
+- **Spec data files belong in the skill, not in project artifacts.**
+  The natural impulse during the migration was symmetry: schemas ship
+  into the project, so spec data files should too. Resisting the
+  impulse: schemas describe the *shape* of project artifacts (so they
+  travel with the artifacts a project ships); spec data files are
+  the *external standards reference* the skill pins (so they travel
+  with the skill that pins them). A project's roadmap directory has
+  no need to carry a copy of `owasp-asvs.json` — the validator reads
+  it from the skill at run time, and downstream skills that need
+  labels read it from the same place or ship their own. The
+  asymmetry follows responsibility, not symmetry. (Pre-R02)
+
+- **Version-baked IDs catch a class of drift that bare IDs cannot.**
+  ASVS 4.0.3's ID format was `V<n>.<n>.<n>` — the version isn't in
+  the ID, only in the document being cited. Two roadmaps citing
+  `V5.1.3` against different ASVS versions were impossible to
+  distinguish without external context. ASVS 5.0+ embeds the version
+  in every ID (`v5.0.0-1.2.5`). Adopting the 5.0+ form (which the
+  schema enforces via regex) means ID drift across versions is
+  visible at the ID level, not buried in a header. The validator's
+  runtime cross-check enforces the version prefix matches the pinned
+  spec version — a roadmap citing `v4.0.3-X.Y.Z` against a 5.0.0-
+  pinned spec is rejected with a specific, unambiguous error.
+  (Pre-R02)
+
+- **The "force visibility" pattern applies to verification too, not
+  just reasoning.** The planning-skill arc (P01–P03) established that
+  silent reasoning is the failure mode and visible artifacts are the
+  fix. The same pattern applies to silent verification: an unverified
+  pin claiming to be verified ("as of <date>") is the same shape of
+  bug as silent scope removal or silent judgment. The remedy is the
+  same: force the verification work into an artifact that can be
+  inspected and challenged (`verified_at`, `verified_against`). When
+  a skill needs to pin to an external standard, the skill must
+  surface the verification work alongside the pin, not just the
+  pin. (Pre-R02)
 
 ## From Prior Skill Set (49 Trials)
 

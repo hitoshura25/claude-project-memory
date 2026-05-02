@@ -1,0 +1,52 @@
+{
+  "spec": "MASVS",
+  "spec_full_name": "OWASP Mobile Application Security Verification Standard",
+  "spec_version": "2.1.0",
+  "spec_release_date": "2024-01",
+  "source_url": "https://github.com/OWASP/masvs",
+  "verified_at": "2026-04-30",
+  "verified_against": "https://github.com/OWASP/masvs/blob/master/Document/03-Using_the_MASVS.md (lists all 8 control groups including MASVS-PRIVACY) and OWASP MAS blog noting MASVS-PRIVACY was added in v2.1.0 in January 2024",
+  "id_format_description": "MASVS-<CATEGORY>-<requirement>, e.g. 'MASVS-STORAGE-1'. Category is uppercase ASCII; requirement is a positive integer. The ID format does not embed the spec version; consumers cross-check the spec_version field against the categories present.",
+  "categories": {
+    "STORAGE": {
+      "title": "Storage",
+      "id_prefix": "STORAGE",
+      "description": "Secure storage of sensitive data on a device (data-at-rest)."
+    },
+    "CRYPTO": {
+      "title": "Cryptography",
+      "id_prefix": "CRYPTO",
+      "description": "Cryptographic functionality used to protect sensitive data."
+    },
+    "AUTH": {
+      "title": "Authentication and Authorization",
+      "id_prefix": "AUTH",
+      "description": "Authentication and authorization mechanisms used by the mobile app."
+    },
+    "NETWORK": {
+      "title": "Network Communication",
+      "id_prefix": "NETWORK",
+      "description": "Secure network communication between the mobile app and remote endpoints (data-in-transit)."
+    },
+    "PLATFORM": {
+      "title": "Platform Interaction",
+      "id_prefix": "PLATFORM",
+      "description": "Secure interaction with the underlying mobile platform and other installed apps."
+    },
+    "CODE": {
+      "title": "Code Quality",
+      "id_prefix": "CODE",
+      "description": "Security best practices for data processing and keeping the app up-to-date."
+    },
+    "RESILIENCE": {
+      "title": "Resilience Against Reverse Engineering and Tampering",
+      "id_prefix": "RESILIENCE",
+      "description": "Resilience to reverse engineering and tampering attempts."
+    },
+    "PRIVACY": {
+      "title": "Privacy",
+      "id_prefix": "PRIVACY",
+      "description": "Privacy controls to protect user privacy."
+    }
+  }
+}
