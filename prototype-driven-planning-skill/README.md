@@ -52,7 +52,68 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-05-02)
+## Current State (2026-05-03)
+
+> **Recent change (2026-05-03 [later]): implementation skill inlines
+> roadmap scenarios at prompt-compose time.** Step 2 of three per
+> `decomposition-roadmap-refactor-plan-2026-05-02.md`. Template change
+> in `compose_prompt.py.template`: new `_inline_roadmap_scenarios`
+> helper parallel to `_inline_dependencies`, with module-level
+> roadmap.json caching, separate `_format_functional_scenario` and
+> `_format_security_scenario` renderers (security includes OWASP id +
+> Performed-by), and explicit-`evidence_kind: prescribed` callouts.
+> The helper is wired into `_build_prompt` between the Files and
+> Acceptance Criteria sections under heading `## Behaviors to Verify
+> (from roadmap)`. Empty citations omit the section; unresolved
+> citations raise `ValueError` loudly (decomposition's validator
+> should have caught them; reaching runtime means the roadmap was
+> regenerated without re-running decomposition). New placeholder
+> `{{ROADMAP_JSON_PATH}}` lives in `config.py.template` (alongside
+> `{{PROJECT_ROOT}}` and other paths) — the compose_prompt template
+> reads `config.ROADMAP_JSON_PATH` at runtime; this matches the
+> existing path-handling pattern. Reference doc updates:
+> `phase-2-generation.md` gained `{{ROADMAP_JSON_PATH}}` row in the
+> Paths placeholder table, new "Roadmap-scenario inlining" subsection
+> in Step 3 with the parallel-to-_inline_dependencies comparison
+> table, updated "Why this is a template" paragraph to mention
+> roadmap-scenario inlining as a stable element. Smoke-tested:
+> template parses with placeholders substituted; full `_build_prompt`
+> renders all sections in correct order; happy/empty/unresolved
+> behaviors all fire correctly. **Step 2 doesn't have a standalone
+> trial — validated end-to-end by T15 once D01 produces a
+> roadmap-citing decomposition the pipeline can consume.**
+
+> **Recent change (2026-05-03): decomposition skill consumes the
+> roadmap.** Step 3 of three per
+> `decomposition-roadmap-refactor-plan-2026-05-02.md` (the bulk of the
+> work). Schema additions to `task_schema.py`: three new task fields
+> (`roadmap_component`, `roadmap_functional_scenarios`,
+> `roadmap_security_scenarios`), two new `TaskDecomposition` fields
+> (`components_json_path`, `roadmap_json_path`), one per-task field
+> validator (slug format), three new decomposition-level model
+> validators (component-registered, scenarios-resolve, scenarios-
+> required-for-test-tasks), four helper functions including
+> project-shipped schema imports and Levenshtein-based "Did you mean"
+> error hints. Reference docs updated end-to-end:
+> `analysis-guide.md` rewritten (roadmap as primary input;
+> components.json registry read; per-component scenario reading);
+> `task-writing-guide.md` gained "Roadmap-Driven Task Authoring"
+> section, `Behaviors to test:` removed from the description template,
+> example TDD pair updated with citation fields, security-considerations
+> rewritten to reflect the citation pattern; `output-format.md` gained
+> the new fields in JSON example, validation rules 13–16, summary
+> table reshaped (Component + Scenarios columns, Files dropped),
+> "Integration with the Roadmap" subsection added; `SKILL.md` updated
+> Quick Reference, How to Start, Phase 1 (now "Roadmap and Design Doc
+> Analysis"), Phase 2 step renumbering with new "Cite roadmap
+> scenarios" step, Phase 3 step 4 description, schema reference table
+> (new fields + new top-level fields), Principles (added "Component
+> boundaries come from the roadmap", "Scenario content lives in the
+> roadmap", "The roadmap is read-only from here"). Schema smoke-tested
+> against 8 cases (the 5 plan-mandated + 3 edge cases) — all pass.
+> **Existing tasks.json files are now invalid** until regenerated
+> against R03 roadmap output; D01 is the trial that will validate
+> end-to-end regeneration.
 
 > **Recent change (2026-05-02): roadmap skill gains scenario `id`
 > field.** First of three coordinated changes per
@@ -63,9 +124,10 @@ Load on-demand only when needed:
 > (`roadmap-json-format.md` and `phase-2-generation.md`) updated with
 > the new field, a new "Scenario IDs" subsection, and Phase 2 writing
 > guidance (preserve IDs across regenerations). Schema smoke-tested
-> against 7 cases (happy path + 6 edge cases) — all pass. **Existing
-> roadmap.json files are now invalid** until regenerated with the new
-> field; R03 is the trial that will validate end-to-end regeneration.
+> against 7 cases (happy path + 6 edge cases) — all pass. R03 trial
+> regenerated `roadmap.json` for airflow-gdrive-ingestion; 33
+> scenarios across 5 components, all kebab-case, unique within each
+> component, schema-valid. R03 trial record pending.
 
 > **Recent change (2026-05-01): R02 re-run validates the OWASP spec
 > migration end-to-end.** First project trial against the rebuilt
@@ -347,22 +409,33 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 
 - **Three-skill refactor per `decomposition-roadmap-refactor-plan-2026-05-02.md`.**
   Three coordinated changes:
-  1. Roadmap skill: add stable `id` field to `FunctionalScenario` and
-     `SecurityScenario`. Validates uniqueness within a component.
-     **Schema and reference doc updates landed 2026-05-02; R03 trial
-     pending (regenerate airflow-gdrive-ingestion roadmap with new
-     IDs and verify end-to-end).**
+  1. Roadmap skill: stable `id` field on scenarios. **Schema and
+     reference doc updates landed 2026-05-02; R03 trial regenerated
+     roadmap.json successfully (33 scenarios, 5 components, all
+     unique within component). R03 trial record pending.**
   2. Implementation skill: `compose_prompt.py.template` gains
-     `_inline_roadmap_scenarios` helper and `{{ROADMAP_JSON_PATH}}`
-     placeholder. No standalone trial; validated end-to-end by T15.
-  3. Decomposition skill: schema additions (`roadmap_component`,
-     `roadmap_functional_scenarios`, `roadmap_security_scenarios`,
-     `components_json_path`, `roadmap_json_path`); description
-     template change (remove `Behaviors to test:` section); validators.
-     D01 trial.
-  After D01, T15 runs the pipeline against the new decomposition
-  output to confirm scenario inlining works end-to-end.
-  **Top of queue.**
+     `_inline_roadmap_scenarios` helper plus `config.ROADMAP_JSON_PATH`
+     (new placeholder in `config.py.template`). **Landed 2026-05-03;
+     no standalone trial — validated end-to-end by T15.**
+  3. Decomposition skill: schema additions, validators, reference doc
+     updates, `Behaviors to test:` section removed. **Schema +
+     reference docs landed 2026-05-03; D01 trial pending
+     (regenerate decomposition for airflow-gdrive-ingestion against
+     R03 roadmap; verify all citations resolve, summary table
+     renders with new columns, no `Behaviors to test:` section in
+     any task description).**
+  All three skill changes have landed. **D01 trial is now the top of
+  queue** — once it produces a roadmap-citing decomposition, T15 can
+  exercise the full chain (decomposition reads roadmap citations →
+  pipeline inlines scenarios at prompt-compose time → executor sees
+  structured Gherkin instead of paraphrased prose).
+
+- **R03 trial record.** Pending; the regeneration was performed and
+  reviewed in conversation but no `trials/R03-*.md` record has been
+  filed yet.
+
+- **D01 trial record.** Pending step 3 commit and the user running
+  the regenerated decomposition.
 
 - **P04 validation trial (planning skill, P01–P03 fixes).** Lower
   priority. Still on the list.
@@ -440,13 +513,13 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     └── phase-3-design-doc.md                     # Updated 2026-04-27
 
 ~/claude-devtools/skills/prototype-driven-task-decomposition/
-├── SKILL.md                                      # Updated 2026-04-19
+├── SKILL.md                                      # Updated 2026-05-03 (roadmap consumption)
 ├── scripts/
-│   └── task_schema.py                            # Updated 2026-04-19
+│   └── task_schema.py                            # Updated 2026-05-03 (roadmap citation fields + 4 new validators)
 └── references/
-    ├── analysis-guide.md
-    ├── task-writing-guide.md                     # Updated 2026-04-19
-    └── output-format.md                          # Updated 2026-04-19
+    ├── analysis-guide.md                         # Rewritten 2026-05-03 (roadmap-primary)
+    ├── task-writing-guide.md                     # Updated 2026-05-03 (Roadmap-Driven Task Authoring section)
+    └── output-format.md                          # Updated 2026-05-03 (new fields, summary table reshape, Integration with Roadmap)
 
 ~/claude-devtools/skills/prototype-driven-implementation/
 ├── SKILL.md                                      # Updated 2026-04-19
@@ -456,17 +529,17 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 │   ├── graph.py
 │   ├── agent_bridge.py
 │   ├── requirements.txt
-│   ├── config.py.template                        # Updated 2026-04-19
+│   ├── config.py.template                        # Updated 2026-05-03 (ROADMAP_JSON_PATH)
 │   └── nodes/
 │       ├── __init__.py
 │       ├── load_tasks.py
-│       ├── compose_prompt.py.template
+│       ├── compose_prompt.py.template                # Updated 2026-05-03 (_inline_roadmap_scenarios)
 │       ├── execute_task.py
 │       ├── verify_task.py                        # Updated 2026-04-19
 │       └── report.py
 └── references/
     ├── phase-1-analysis.md                       # Updated 2026-04-19
-    ├── phase-2-generation.md                     # Updated 2026-04-19
+    ├── phase-2-generation.md                     # Updated 2026-05-03 (roadmap-scenario inlining)
     ├── langgraph-patterns.md
     ├── executor-integration.md
     └── phase-3-handoff.md                        # Updated 2026-04-19
