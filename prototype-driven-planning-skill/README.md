@@ -32,8 +32,9 @@ Load on-demand only when needed:
 - `gemini_conversation.txt` (historical)
 - `trials/_INDEX.md`
 - `trials/T<NN>-*.md` — pipeline trials (T01–T14)
-- `trials/P<NN>-*.md` — planning-skill iterations (P01–P03)
-- `trials/R<NN>-*.md` — roadmap-skill trials and rebuilds (R01, R02-prep, R02)
+- `trials/P<NN>-*.md` — planning-skill iterations (P01–P03, P05)
+- `trials/R<NN>-*.md` — roadmap-skill trials and rebuilds (R01, R02-prep, R02, R03)
+- `trials/D<NN>-*.md` — decomposition-skill iterations (D01)
 - `refactor-plan-2026-04-17.md` — T13 refactor (landed in T14)
 - `refactor-plan-2026-04-19.md` — T14 refactor (landed same day)
 - `skill-expansion-plan-2026-04-21.md` — historical reference; all parts landed
@@ -52,7 +53,28 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-05-03)
+## Current State (2026-05-04)
+
+> **Recent change (2026-05-04): D01 trial validates the decomposition
+> refactor end-to-end.** Step 3 of three per
+> `decomposition-roadmap-refactor-plan-2026-05-02.md` (the bulk of the
+> work, landed 2026-05-03). The user ran the regenerated decomposition
+> against R03's roadmap output for airflow-gdrive-ingestion. Result:
+> 13 tasks across 5 components, 60 scenario citations all resolve,
+> `Behaviors to test:` section absent from every task description,
+> stub-import discipline preserved on all four test tasks, T14
+> invariants (test_command non-empty, integration-lifecycle wrapping,
+> stub on test tasks only) all hold under the extended schema. Clean
+> sweep — no new failure modes. **D01 unblocks T15 — the
+> implementation pipeline can now be regenerated against the new
+> tasks.json. Step 2 of the refactor (compose_prompt.py.template
+> gaining `_inline_roadmap_scenarios`, landed 2026-05-03) needs no
+> further work; T15 will exercise the full chain end-to-end.** Detail:
+> `trials/D01-decomposition-roadmap-integration.md`. The previous task
+> directory at
+> `~/health-data-ai-platform/tasks/airflow-google-drive-ingestion/`
+> (T14 output, invalid against the new schema) is now obsolete and can
+> be deleted manually.
 
 > **Recent change (2026-05-03 [later]): implementation skill inlines
 > roadmap scenarios at prompt-compose time.** Step 2 of three per
@@ -115,19 +137,20 @@ Load on-demand only when needed:
 > against R03 roadmap output; D01 is the trial that will validate
 > end-to-end regeneration.
 
-> **Recent change (2026-05-02): roadmap skill gains scenario `id`
-> field.** First of three coordinated changes per
-> `decomposition-roadmap-refactor-plan-2026-05-02.md`. Added required
-> `id: str` field to both `FunctionalScenario` and `SecurityScenario`
-> in `roadmap_schema.py`; new `scenario_ids_unique_within_component`
-> model validator rejects duplicates across both lists; reference docs
-> (`roadmap-json-format.md` and `phase-2-generation.md`) updated with
-> the new field, a new "Scenario IDs" subsection, and Phase 2 writing
-> guidance (preserve IDs across regenerations). Schema smoke-tested
-> against 7 cases (happy path + 6 edge cases) — all pass. R03 trial
-> regenerated `roadmap.json` for airflow-gdrive-ingestion; 33
-> scenarios across 5 components, all kebab-case, unique within each
-> component, schema-valid. R03 trial record pending.
+> **Recent change (2026-05-02): R03 trial validates roadmap skill's
+> scenario `id` field.** First of three coordinated changes per
+> `decomposition-roadmap-refactor-plan-2026-05-02.md`. Schema additions
+> to `roadmap_schema.py`: required `id: str` on `FunctionalScenario`
+> and `SecurityScenario`; format validator (kebab-case);
+> `scenario_ids_unique_within_component` model validator (rejects
+> duplicates across both lists). Reference docs (`roadmap-json-format.md`,
+> `phase-2-generation.md`) updated with the new field, a new "Scenario
+> IDs" subsection, and Phase 2 writing guidance (preserve IDs across
+> regenerations). Schema smoke-tested against 7 cases (happy + 6 edge
+> cases) — all pass. R03 trial regenerated `roadmap.json` for
+> airflow-gdrive-ingestion; 33 scenarios across 5 components, all
+> kebab-case, unique within each component, schema-valid. Detail:
+> `trials/R03-roadmap-scenario-id-field.md`.
 
 > **Recent change (2026-05-01): R02 re-run validates the OWASP spec
 > migration end-to-end.** First project trial against the rebuilt
@@ -148,8 +171,10 @@ below.
 
 **prototype-driven-task-decomposition** — Required `test_command: str`
 field with two validators landed 2026-04-19 (T14). Refactor to consume
-roadmap output is the next major work; the prerequisite plan-doc update
-(JSON output references) is the top of the queue.
+roadmap output landed 2026-05-03; D01 (2026-05-04) validated end-to-end
+against R03 roadmap output. Schema gains 3 task fields + 2 top-level
+fields + 4 validators. Component boundaries and behavioral scenarios
+now come from the upstream roadmap; the decomposer doesn't infer them.
 
 **prototype-driven-implementation** — LangGraph pipeline with
 templated stable files; verbatim `test_command` copy from the schema;
@@ -164,7 +189,8 @@ plus label canonicalization landed 2026-04-30. R02 re-run against
 the rebuilt skill validated 2026-05-01 (clean sweep). Scenario `id`
 field (required, kebab-case, unique-within-component) landed
 2026-05-02 as step 1 of the three-skill decomposition refactor;
-R03 will validate end-to-end regeneration.
+R03 (2026-05-02) validated end-to-end (33 scenarios, 5 components,
+clean sweep).
 
 ### Roadmap Skill OWASP Spec Migration (2026-04-30)
 
@@ -328,7 +354,7 @@ T14 refactor (`refactor-plan-2026-04-19.md`) landed same day:
   schema. Scaffold gets a real test gate (its own `test_command`
   with exit-5-tolerant pytest semantics).
 
-Validates in T15 (queued after D01 — see Next Steps).
+Validates in T15 (next — see Next Steps).
 
 ### T10–T13 Arc (2026-04-16 through 2026-04-17)
 
@@ -407,42 +433,33 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 
 ## Next Steps
 
-- **Three-skill refactor per `decomposition-roadmap-refactor-plan-2026-05-02.md`.**
-  Three coordinated changes:
-  1. Roadmap skill: stable `id` field on scenarios. **Schema and
-     reference doc updates landed 2026-05-02; R03 trial regenerated
-     roadmap.json successfully (33 scenarios, 5 components, all
-     unique within component). R03 trial record pending.**
-  2. Implementation skill: `compose_prompt.py.template` gains
-     `_inline_roadmap_scenarios` helper plus `config.ROADMAP_JSON_PATH`
-     (new placeholder in `config.py.template`). **Landed 2026-05-03;
-     no standalone trial — validated end-to-end by T15.**
-  3. Decomposition skill: schema additions, validators, reference doc
-     updates, `Behaviors to test:` section removed. **Schema +
-     reference docs landed 2026-05-03; D01 trial pending
-     (regenerate decomposition for airflow-gdrive-ingestion against
-     R03 roadmap; verify all citations resolve, summary table
-     renders with new columns, no `Behaviors to test:` section in
-     any task description).**
-  All three skill changes have landed. **D01 trial is now the top of
-  queue** — once it produces a roadmap-citing decomposition, T15 can
-  exercise the full chain (decomposition reads roadmap citations →
-  pipeline inlines scenarios at prompt-compose time → executor sees
-  structured Gherkin instead of paraphrased prose).
+- **T15 — top of queue.** Run the implementation pipeline against
+  D01's regenerated tasks.json. Acceptance: pipeline imports the new
+  `task_schema.py` cleanly; `compose_prompt.py` inlines roadmap
+  scenarios for tasks with citations (manual spot-check of two task
+  prompts in `logs/prompts/`); executor sees richer Given/When/Then
+  content than the previous paraphrased prose; end-to-end pipeline
+  run completes (existing T01–T14 acceptance bar still applies).
+  Detail in `trials/T15-roadmap-driven-pipeline.md` once filed.
 
-- **R03 trial record.** Pending; the regeneration was performed and
-  reviewed in conversation but no `trials/R03-*.md` record has been
-  filed yet.
-
-- **D01 trial record.** Pending step 3 commit and the user running
-  the regenerated decomposition.
+- **Three-skill refactor per
+  `decomposition-roadmap-refactor-plan-2026-05-02.md` — complete on
+  the skill side.** All three coordinated changes have landed and two
+  have validation trials filed (R03, D01). T15 is the final
+  end-to-end validation.
 
 - **P04 validation trial (planning skill, P01–P03 fixes).** Lower
   priority. Still on the list.
 
-- **Manual cleanup**: delete
+- **(Done) Manual cleanup**:
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
-  (tombstone file; noted but not confirmed present).
+  tombstone confirmed deleted 2026-05-04.
+
+- **(Done) Obsolete decomposition output cleanup**:
+  `~/health-data-ai-platform/tasks/airflow-google-drive-ingestion/`
+  (T14 directory, invalid against the post-D01 schema) can be deleted
+  manually. The current decomposition output lives at
+  `~/health-data-ai-platform/tasks/airflow-gdrive-ingestion/`.
 
 ---
 
@@ -460,6 +477,7 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks)
 - Session `b2354707-0024-45db-bb9a-7ff872e39271` — Second run (11 tasks)
 - Session `64052f92-5393-4425-8286-1389124c6feb` — Third run (27 tasks)
+- D01 (2026-05-04) — First decomposition-skill iteration trial; validates roadmap consumption (step 3 of three-skill refactor). 13 tasks across 5 components, 60 scenario citations all resolve, clean sweep.
 
 ### Implementation Skill — runs 1–14
 See `trials/_SUMMARY.md` for the canonical scoreboard.
@@ -474,10 +492,10 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
   Not a project trial.
 - R02 re-run (2026-05-01) — first trial against rebuilt skill;
   clean sweep. Validates the OWASP spec migration end-to-end.
-- R03 (revived, retargeted) — originally queued for Project Setup
-  component validation (which R02 re-run implicitly satisfied).
-  Now retargeted to validate the scenario `id` field addition
-  (per decomposition-roadmap-refactor-plan-2026-05-02.md).
+- R03 (2026-05-02) — retargeted to validate scenario `id` field
+  addition (step 1 of 2026-05-02 three-skill refactor). Schema
+  smoke-tested + airflow-gdrive-ingestion regenerated; 33 scenarios
+  across 5 components, all unique within component. Clean sweep.
 
 ---
 
@@ -502,7 +520,8 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     ├── _INDEX.md
     ├── T<NN>-<slug>.md                           # Pipeline trials
     ├── P<NN>-<slug>.md                           # Planning-skill iterations
-    └── R<NN>-<slug>.md                           # Roadmap-skill trials/rebuilds (R01, R02-prep)
+    ├── R<NN>-<slug>.md                           # Roadmap-skill trials/rebuilds (R01, R02-prep, R02, R03)
+    └── D<NN>-<slug>.md                           # Decomposition-skill iterations (D01)
 
 ~/claude-devtools/skills/prototype-driven-planning/
 ├── SKILL.md                                      # Updated 2026-04-27
