@@ -34,7 +34,7 @@ Load on-demand only when needed:
 - `trials/T<NN>-*.md` — pipeline trials (T01–T14)
 - `trials/P<NN>-*.md` — planning-skill iterations (P01–P03, P05)
 - `trials/R<NN>-*.md` — roadmap-skill trials and rebuilds (R01, R02-prep, R02, R03)
-- `trials/D<NN>-*.md` — decomposition-skill iterations (D01)
+- `trials/D<NN>-*.md` — decomposition-skill iterations (D01, D02)
 - `refactor-plan-2026-04-17.md` — T13 refactor (landed in T14)
 - `refactor-plan-2026-04-19.md` — T14 refactor (landed same day)
 - `skill-expansion-plan-2026-04-21.md` — historical reference; all parts landed
@@ -53,7 +53,36 @@ Load on-demand only when needed:
 
 ---
 
-## Current State (2026-05-04)
+## Current State (2026-05-06)
+
+> **Recent change (2026-05-06): D02 surfaces and fixes CWD-relative
+> path resolution in the decomposition schema.** First T15 attempt
+> failed at `load_tasks_node` with `FileNotFoundError`: the user ran
+> `python run.py` from `pipelines/airflow-gdrive-ingestion/`, the
+> schema's `Path(self.components_json_path).resolve()` calls in
+> `_load_roadmap_schemas` and the cross-file validators resolved
+> against the pipeline-dir CWD instead of the project root. D01
+> didn't catch this because validation ran from project root —
+> schema and CWD coincidentally agreed. Fix: `_PROJECT_ROOT`
+> constant inferred from `__file__` location + new
+> `_resolve_project_path(p) -> Path` helper in `task_schema.py`,
+> replacing four `Path(p).resolve()` call sites; field-description
+> prose on `components_json_path` and `roadmap_json_path` updated to
+> document the resolution rule. Parallel `_resolve_project_path`
+> helper in `compose_prompt.py.template` (sourced from
+> `config.PROJECT_ROOT`, same name+shape as schema's), replacing
+> the inline absolute/relative guard in `_load_roadmap`. Two helpers
+> share name + shape so the pattern is greppable; sources differ
+> because each side has access to a different concrete project-root
+> answer. Phase 3 of the implementation skill gains a Smoke Test
+> section in `phase-3-handoff.md` that runs from the pipeline
+> directory (matching the runtime CWD) and exercises both helpers
+> transitively (`load_tasks_node` for schema-side,
+> `_inline_roadmap_scenarios` for implementation-side); SKILL.md
+> Phase 3 step list renumbered, smoke test as step 3. **Project-side
+> artifacts unchanged per directive** — user regenerates decomposition
+> + pipeline from fixed skills before retrying T15. Detail:
+> `trials/D02-cwd-relative-path-resolution.md`.
 
 > **Recent change (2026-05-04): D01 trial validates the decomposition
 > refactor end-to-end.** Step 3 of three per
@@ -175,11 +204,22 @@ roadmap output landed 2026-05-03; D01 (2026-05-04) validated end-to-end
 against R03 roadmap output. Schema gains 3 task fields + 2 top-level
 fields + 4 validators. Component boundaries and behavioral scenarios
 now come from the upstream roadmap; the decomposer doesn't infer them.
+D02 (2026-05-06) added explicit project-root anchoring to schema-side
+path resolution after the T15 first attempt surfaced a CWD-implicit
+bug; `_resolve_project_path` helper now replaces four
+`Path(p).resolve()` call sites in `task_schema.py`.
 
 **prototype-driven-implementation** — LangGraph pipeline with
 templated stable files; verbatim `test_command` copy from the schema;
 scaffold verification runs bootstrap + lint-tool check + the
-scaffold's own test_command. T14 refactor landed 2026-04-19.
+scaffold's own test_command. T14 refactor landed 2026-04-19. D02
+(2026-05-06) added a parallel `_resolve_project_path` helper to
+`compose_prompt.py.template` (replacing the inline absolute/relative
+guard with a named helper that mirrors the decomposition schema's
+shape) and a Phase 3 Smoke Test step that runs from the pipeline
+directory and exercises the path-resolution code in both
+`load_tasks_node` and `compose_prompt._inline_roadmap_scenarios`
+before handoff.
 
 **prototype-driven-roadmap** — Three phases (Extraction → Generation
 → Validation) producing `components.json` + `roadmap.json` (post-
@@ -433,20 +473,26 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 
 ## Next Steps
 
-- **T15 — top of queue.** Run the implementation pipeline against
-  D01's regenerated tasks.json. Acceptance: pipeline imports the new
-  `task_schema.py` cleanly; `compose_prompt.py` inlines roadmap
-  scenarios for tasks with citations (manual spot-check of two task
-  prompts in `logs/prompts/`); executor sees richer Given/When/Then
-  content than the previous paraphrased prose; end-to-end pipeline
-  run completes (existing T01–T14 acceptance bar still applies).
-  Detail in `trials/T15-roadmap-driven-pipeline.md` once filed.
+- **T15 — blocked on user-side regeneration.** D02 fixed the schema
+  and template upstream; the user must (1) re-run decomposition to
+  reship `task_schema.py` to the project, and (2) re-run pipeline
+  generation to produce a `compose_prompt.py` with the new helper.
+  After that, T15 can proceed. Acceptance bar unchanged: pipeline
+  imports the new `task_schema.py` cleanly; `compose_prompt.py`
+  inlines roadmap scenarios for tasks with citations (manual
+  spot-check of two task prompts in `logs/prompts/`); executor sees
+  richer Given/When/Then content than the previous paraphrased prose;
+  end-to-end pipeline run completes (existing T01–T14 acceptance bar
+  still applies). The new Phase 3 smoke test (step 3 in SKILL.md,
+  detail in `phase-3-handoff.md` § "Smoke Test") should pass before
+  handoff. Detail in `trials/T15-roadmap-driven-pipeline.md` once
+  filed.
 
 - **Three-skill refactor per
   `decomposition-roadmap-refactor-plan-2026-05-02.md` — complete on
-  the skill side.** All three coordinated changes have landed and two
-  have validation trials filed (R03, D01). T15 is the final
-  end-to-end validation.
+  the skill side.** All three coordinated changes have landed and
+  three have validation trials filed (R03, D01, D02). T15 is the
+  final end-to-end validation.
 
 - **P04 validation trial (planning skill, P01–P03 fixes).** Lower
   priority. Still on the list.
@@ -478,6 +524,7 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - Session `b2354707-0024-45db-bb9a-7ff872e39271` — Second run (11 tasks)
 - Session `64052f92-5393-4425-8286-1389124c6feb` — Third run (27 tasks)
 - D01 (2026-05-04) — First decomposition-skill iteration trial; validates roadmap consumption (step 3 of three-skill refactor). 13 tasks across 5 components, 60 scenario citations all resolve, clean sweep.
+- D02 (2026-05-06) — CWD-relative path resolution surfaced at T15 first attempt. Schema-side `_resolve_project_path` helper added; parallel helper in `compose_prompt.py.template`; Phase 3 smoke test added. Project-side artifacts unchanged per directive.
 
 ### Implementation Skill — runs 1–14
 See `trials/_SUMMARY.md` for the canonical scoreboard.
@@ -521,7 +568,7 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     ├── T<NN>-<slug>.md                           # Pipeline trials
     ├── P<NN>-<slug>.md                           # Planning-skill iterations
     ├── R<NN>-<slug>.md                           # Roadmap-skill trials/rebuilds (R01, R02-prep, R02, R03)
-    └── D<NN>-<slug>.md                           # Decomposition-skill iterations (D01)
+    └── D<NN>-<slug>.md                           # Decomposition-skill iterations (D01, D02)
 
 ~/claude-devtools/skills/prototype-driven-planning/
 ├── SKILL.md                                      # Updated 2026-04-27
@@ -534,14 +581,14 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ~/claude-devtools/skills/prototype-driven-task-decomposition/
 ├── SKILL.md                                      # Updated 2026-05-03 (roadmap consumption)
 ├── scripts/
-│   └── task_schema.py                            # Updated 2026-05-03 (roadmap citation fields + 4 new validators)
+│   └── task_schema.py                            # Updated 2026-05-06 (D02: `_resolve_project_path` helper + 4 call sites)
 └── references/
     ├── analysis-guide.md                         # Rewritten 2026-05-03 (roadmap-primary)
     ├── task-writing-guide.md                     # Updated 2026-05-03 (Roadmap-Driven Task Authoring section)
     └── output-format.md                          # Updated 2026-05-03 (new fields, summary table reshape, Integration with Roadmap)
 
 ~/claude-devtools/skills/prototype-driven-implementation/
-├── SKILL.md                                      # Updated 2026-04-19
+├── SKILL.md                                      # Updated 2026-05-06 (D02: Phase 3 step list renumbered, smoke test as step 3)
 ├── templates/
 │   ├── run.py
 │   ├── pipeline_state.py
@@ -552,7 +599,7 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 │   └── nodes/
 │       ├── __init__.py
 │       ├── load_tasks.py
-│       ├── compose_prompt.py.template                # Updated 2026-05-03 (_inline_roadmap_scenarios)
+│       ├── compose_prompt.py.template                # Updated 2026-05-06 (D02: `_resolve_project_path` helper hoisted from inline guard)
 │       ├── execute_task.py
 │       ├── verify_task.py                        # Updated 2026-04-19
 │       └── report.py
@@ -561,7 +608,7 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     ├── phase-2-generation.md                     # Updated 2026-05-03 (roadmap-scenario inlining)
     ├── langgraph-patterns.md
     ├── executor-integration.md
-    └── phase-3-handoff.md                        # Updated 2026-04-19
+    └── phase-3-handoff.md                        # Updated 2026-05-06 (D02: Smoke Test section added)
 
 ~/claude-devtools/skills/prototype-driven-roadmap/
 ├── SKILL.md                                      # Major rewrite 2026-04-30 (OWASP spec migration)
