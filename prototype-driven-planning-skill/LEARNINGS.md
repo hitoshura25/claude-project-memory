@@ -740,6 +740,95 @@ created three opportunities for drift.
   surface the verification work alongside the pin, not just the
   pin. (Pre-R02)
 
+## From Phase A/B Scaffold Split (2026-05-07)
+
+The Phase A/B refactor of the implementation skill landed after T15's
+two attempts both blocked at task-01 with the same Python
+version-incompatibility cascade. The conversation that followed
+surfaced lessons that generalize across the skill set.
+
+- **Static ecosystem-to-tool tables are stop-thinking instructions,
+  not documentation.** Whenever a skill writes a table of the shape
+  "for ecosystem X, use tool Y," the model running the skill reads
+  the table as authoritative, picks the row, and stops. The table
+  becomes wrong as soon as (a) the project's actual convention
+  differs from the table, (b) the ecosystem moves on between table
+  authoring and skill use, or (c) the table's columns don't capture
+  what actually varies. This is the third documented instance of
+  this failure shape. CLI flags ('aider/claude/gemini headless
+  invocations') were promoted to runtime research after going stale
+  during the T13–T14 era. OWASP version pins ("ASVS 4.0.3 (last
+  major release as of 2026-04-24)") were promoted to live
+  verification after Pre-R02 found 5.0.0 had been out for months.
+  Bootstrap commands ("Python ⇒ uv sync --dev, Node ⇒ npm install")
+  were promoted to project-signal-detection-plus-runtime-research
+  after T15 found they didn't model runtime version compatibility.
+  Generalize: when the skill knows a fact about an external
+  ecosystem, the skill specifies the *responsibility* (what the
+  output must accomplish) and the *signals* (what evidence to look
+  for in the project), and the model researches the *realization*
+  at use time. The skill doesn't carry the realization. (T15→T16)
+
+- **Environmental failures and code-quality failures need different
+  recovery paths.** The LangGraph pipeline's retry/escalate/cascade
+  logic was designed for code-quality failures: the executor wrote
+  bad code, retry it; the executor still wrote bad code, escalate
+  to a stronger executor. Applied to environmental failures (host
+  Python doesn't satisfy the project's pin, package not on PyPI,
+  network unreachable, container build broken), this logic is
+  pure waste — running the same shell command three times against
+  the same broken environment gets the same error three times,
+  and a more capable executor can't fix what's not in its scope.
+  The right recovery for environmental failures is interactive
+  diagnosis with the user. The Phase A/B split puts environmental
+  setup in the conversation (Claude Code with full diagnostic
+  tools, user in the loop) and reserves the pipeline for code-
+  quality failures. The shape of the recovery loop matches the
+  shape of the failure. (T15→T16)
+
+- **Long-running processes don't see edits to imported config.**
+  T15 run 2 retry-1 had Claude tier-1 correctly diagnose the
+  bootstrap failure and edit `config.py` mid-run — but the change
+  had no effect because `config.py` was already imported into the
+  running pipeline process; the SCAFFOLD_BOOTSTRAP_CMD string in
+  memory was the old value. The fix isn't "reload config on each
+  task" (it would mask state-shape bugs and risk inconsistency
+  mid-run); the fix is to keep config-affecting decisions out of
+  the pipeline's runtime entirely. Decisions that need to change
+  belong in the conversation that generates the pipeline, before
+  `python run.py` is run. Mid-run config edits by an executor are
+  a class of action that shouldn't be possible — and won't be,
+  once scaffold is the only place that needs them and scaffold is
+  no longer in the pipeline. (T15)
+
+- **Auto-resume via persisted per-task state is the right default.**
+  The pre-2026-05-07 pipeline required `--start <task-id>` whenever
+  the user wanted to resume from a specific point. This is a worse
+  default than auto-resume because (a) the user has to remember
+  which task failed last, (b) it makes re-runs verbose, (c) it
+  creates a class of off-by-one bugs ("start at the failed one or
+  the next one?"). Persisting per-task verdicts to
+  `logs/task_status.json` and reading the file in `pick_next_task`
+  removes the user-side bookkeeping. `--start` becomes an override
+  for explicit re-runs of already-passed tasks. The minimal schema
+  (per-task entry: status + timestamp + executor_tier + retries)
+  is enough; hash-based invalidation is deferred until a real bug
+  forces it. (Phase A/B refactor)
+
+- **Pair pipeline generation with one-shot scaffold execution.**
+  Earlier versions of the implementation skill let the user
+  regenerate `pipelines/<feature>/` over an existing directory.
+  This created a class of half-state bugs: regenerated pipeline
+  with stale scaffold marker, new config with old service venv,
+  test_status.json from a different decomposition. The fix is
+  structural: the implementation skill stops if the pipeline
+  directory already exists and asks the user to remove it.
+  Pipeline generation, scaffold execution, and the
+  scaffold-complete marker are paired in one conversation, in
+  that order. "Should I re-run scaffold?" becomes
+  "reset-and-regenerate or don't-touch." Simpler invariants,
+  fewer half-states. (Phase A/B refactor)
+
 ## From Prior Skill Set (49 Trials)
 
 - LLM non-determinism makes "Big Design Up Front" a losing strategy.

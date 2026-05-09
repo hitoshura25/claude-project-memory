@@ -50,10 +50,68 @@ Load on-demand only when needed:
   component plan (landed 2026-04-27; validates in P05)
 - `asvs-5-migration-plan-2026-04-30.md` — OWASP spec migration plan
   (landed 2026-04-30)
+- `phase-a-scaffold-split-plan-2026-05-07.md` — **Active plan**
+  for splitting scaffold execution out of the LangGraph pipeline
+  (Phase A in conversation; Phase B in pipeline) and replacing the
+  static bootstrap lookup with research-at-runtime. Skill changes
+  landed 2026-05-07; T16 validates end-to-end.
 
 ---
 
-## Current State (2026-05-06)
+## Current State (2026-05-07)
+
+> **Recent change (2026-05-07): Phase A/B scaffold split + research-at-runtime
+> for runtime isolation.** T15 ran twice (2026-05-07 11:33 and 15:54)
+> and both attempts blocked at task-01 on bootstrap. The pinned
+> `apache-airflow==2.10.5` requires Python `<3.13`; the host's `python3`
+> is 3.14, and the bootstrap command Phase 1 generated didn't account
+> for the version mismatch. Run 2 retry-1 had Claude tier-1 correctly
+> diagnose the issue and edit `config.py` mid-run, but the change had
+> no effect (config was already imported into the running pipeline
+> process); pipeline cascaded 11 task skips. Conversation worked
+> through three conjoined questions: (Q1) does decomposition need
+> bootstrap validation? (Q2) are the two Pythons — pipeline runtime
+> vs. service runtime — colliding? (Q3) should scaffold move out of
+> the pipeline? Answer landed on a coordinated implementation-skill
+> refactor with four pieces: (D1) Phase A executes scaffold +
+> bootstrap interactively in the same conversation that generated
+> the pipeline; Phase B = pipeline executes tasks 02..N. (D2)
+> Pipeline-existence precondition — implementation skill stops if
+> `pipelines/<feature>/` already exists. (D3) Runtime-isolation
+> research replaces the static ecosystem lookup table — the skill
+> describes responsibilities (provision pinned runtime + isolated
+> dependency install + invoke commands without host PATH) and
+> signals (lockfiles, runtime-pin files, build-tool config); the
+> model researches the project's actual tooling at Phase 1, verifies
+> with a temp-dir test before committing. No prescriptive
+> ecosystem-to-tool table. (D4) Auto-resume via `logs/task_status.json`
+> — pipeline writes per-task verdicts atomically; `pick_next_task`
+> reads the file and skips passed tasks; `--start` becomes an
+> override. Skill changes landed: SKILL.md restructured (Phase 3
+> absorbs Scaffold Execution); `phase-1-analysis.md` rewritten
+> (static bootstrap lookup table removed; Runtime-Isolation Research
+> protocol added); `phase-2-generation.md` updated (new
+> RUNTIME_VERSION_PIN / RUNTIME_VERSION_CHECK_CMD placeholders;
+> static ecosystem table reframed as project-tooling-detected);
+> `phase-3-handoff.md` rewritten end-to-end (Validation / Scaffold
+> Execution / Handoff sections; six-step Phase A protocol).
+> Templates: new `nodes/check_preconditions.py` (verifies
+> `.scaffold_complete` marker + lint/test tools at startup);
+> `verify_task.py` lost its `_run_scaffold_bootstrap` branch and now
+> writes per-verdict entries to `task_status.json`; `graph.py` wires
+> `check_preconditions` between `load_tasks` and `pick_next_task`,
+> and persists status from `mark_failed` and skip transitions;
+> `load_tasks.py` merges `task_status.json` on startup;
+> `pipeline_state.py` drops `bootstrap_done`; `run.py` updates help
+> text for auto-resume default; `config.py.template` adds
+> RUNTIME_VERSION_PIN, RUNTIME_VERSION_CHECK_CMD, removes
+> SCAFFOLD_BOOTSTRAP_CMD comment about pipeline-runtime usage. All six
+> edited template Python files compile clean. **No decomposition
+> changes.** No planning changes. No roadmap changes. Plan doc:
+> `phase-a-scaffold-split-plan-2026-05-07.md`. Validation: T16
+> (pre-trial: user removes existing `pipelines/airflow-gdrive-ingestion/`
+> directory; trial: full chain end-to-end against
+> airflow-gdrive-ingestion).
 
 > **Recent change (2026-05-06): D02 surfaces and fixes CWD-relative
 > path resolution in the decomposition schema.** First T15 attempt
@@ -210,16 +268,30 @@ bug; `_resolve_project_path` helper now replaces four
 `Path(p).resolve()` call sites in `task_schema.py`.
 
 **prototype-driven-implementation** — LangGraph pipeline with
-templated stable files; verbatim `test_command` copy from the schema;
-scaffold verification runs bootstrap + lint-tool check + the
-scaffold's own test_command. T14 refactor landed 2026-04-19. D02
-(2026-05-06) added a parallel `_resolve_project_path` helper to
-`compose_prompt.py.template` (replacing the inline absolute/relative
-guard with a named helper that mirrors the decomposition schema's
-shape) and a Phase 3 Smoke Test step that runs from the pipeline
-directory and exercises the path-resolution code in both
-`load_tasks_node` and `compose_prompt._inline_roadmap_scenarios`
-before handoff.
+templated stable files; verbatim `test_command` copy from the schema.
+T14 refactor landed 2026-04-19. D02 (2026-05-06) added a parallel
+`_resolve_project_path` helper to `compose_prompt.py.template`
+(replacing the inline absolute/relative guard with a named helper
+that mirrors the decomposition schema's shape) and a Phase 3 Smoke
+Test step that runs from the pipeline directory and exercises the
+path-resolution code in both `load_tasks_node` and
+`compose_prompt._inline_roadmap_scenarios` before handoff.
+2026-05-07 landed the Phase A/B scaffold split: scaffold task-01 is
+now executed by Claude Code in conversation as part of Phase 3
+(after pipeline generation, before handoff), not by the LangGraph
+pipeline. The pipeline gains a `check_preconditions` startup node
+(verifies `.scaffold_complete` marker + lint/test tools), an
+auto-resume mechanism via `logs/task_status.json` (pick_next_task
+skips already-passed tasks), and atomic per-verdict persistence in
+verify_task / mark_failed / skip transitions. Phase 1 replaces its
+static bootstrap lookup table with a Runtime-Isolation Research
+protocol — the model determines runtime-isolation tooling from
+project signals (lockfiles, runtime-pin files, build-tool config)
+or from runtime web research, locates the project's runtime
+version pin, constructs the bootstrap command, and tests it in a
+temp dir before committing. Two new config placeholders
+(RUNTIME_VERSION_PIN, RUNTIME_VERSION_CHECK_CMD) drive Phase 3's
+active-runtime-matches-pin verification. Validates in T16.
 
 **prototype-driven-roadmap** — Three phases (Extraction → Generation
 → Validation) producing `components.json` + `roadmap.json` (post-
@@ -473,26 +545,46 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 
 ## Next Steps
 
-- **T15 — blocked on user-side regeneration.** D02 fixed the schema
-  and template upstream; the user must (1) re-run decomposition to
-  reship `task_schema.py` to the project, and (2) re-run pipeline
-  generation to produce a `compose_prompt.py` with the new helper.
-  After that, T15 can proceed. Acceptance bar unchanged: pipeline
-  imports the new `task_schema.py` cleanly; `compose_prompt.py`
-  inlines roadmap scenarios for tasks with citations (manual
-  spot-check of two task prompts in `logs/prompts/`); executor sees
-  richer Given/When/Then content than the previous paraphrased prose;
-  end-to-end pipeline run completes (existing T01–T14 acceptance bar
-  still applies). The new Phase 3 smoke test (step 3 in SKILL.md,
-  detail in `phase-3-handoff.md` § "Smoke Test") should pass before
-  handoff. Detail in `trials/T15-roadmap-driven-pipeline.md` once
-  filed.
+- **T16 — validates the Phase A/B scaffold split end-to-end.**
+  Pre-trial setup: user removes existing
+  `pipelines/airflow-gdrive-ingestion/` directory (the
+  pipeline-existence precondition requires a clean slate). Trial
+  sequence: (1) re-run implementation skill against
+  airflow-gdrive-ingestion's tasks.json. Phase 1 should produce
+  visible runtime-isolation research output (signals consulted, tool
+  chosen, runtime pin detected, bootstrap command tested in temp
+  dir). Phase 3 executes scaffold task-01 + bootstrap interactively;
+  the Python-3.13-incompatibility that blocked T15 should not occur
+  because the bootstrap installs the project-pinned runtime via the
+  chosen tool, not via the host's `python3`. Phase 3 writes
+  `.scaffold_complete` and `logs/task_status.json` with task-01
+  marked passed. (2) `python run.py` (no `--start` flag).
+  `check_preconditions` finds the marker and tool availability;
+  `pick_next_task` reads `task_status.json` and starts at task-02.
+  Tasks 02..N execute. (3) Re-run `python run.py`; verify it skips
+  all passed tasks and exits cleanly. Acceptance bar: T15's blocking
+  failure mode (Python version incompatibility cascading) does not
+  occur; Phase A completes without retry/escalation cascade;
+  task_status.json accurately tracks state across runs; runtime
+  isolation step shows visible research output (URLs, tool choice
+  rationale) rather than table consultation; bootstrap command
+  contains an explicit runtime-version specifier; pipeline completes
+  all 12 tasks. Out of scope: validating runtime-isolation against
+  non-Python ecosystems (responsibility-not-realization framing makes
+  this safe in principle; future trial will validate with a Node /
+  Android / Go project). Detail in `trials/T16-phase-a-scaffold-split.md`
+  once filed.
+
+- **T15 — superseded by T16.** T15's two attempts (2026-05-07 11:33
+  and 15:54) blocked at task-01 on Python version incompatibility
+  and motivated the Phase A/B refactor. The end-to-end validation
+  T15 was meant to perform now lives in T16's acceptance bar.
 
 - **Three-skill refactor per
   `decomposition-roadmap-refactor-plan-2026-05-02.md` — complete on
   the skill side.** All three coordinated changes have landed and
-  three have validation trials filed (R03, D01, D02). T15 is the
-  final end-to-end validation.
+  three have validation trials filed (R03, D01, D02). T16 is the
+  final end-to-end validation (replacing T15).
 
 - **P04 validation trial (planning skill, P01–P03 fixes).** Lower
   priority. Still on the list.
@@ -588,27 +680,28 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     └── output-format.md                          # Updated 2026-05-03 (new fields, summary table reshape, Integration with Roadmap)
 
 ~/claude-devtools/skills/prototype-driven-implementation/
-├── SKILL.md                                      # Updated 2026-05-06 (D02: Phase 3 step list renumbered, smoke test as step 3)
+├── SKILL.md                                      # Updated 2026-05-07 (Phase A/B split, runtime-isolation research, no static bootstrap table)
 ├── templates/
-│   ├── run.py
-│   ├── pipeline_state.py
-│   ├── graph.py
+│   ├── run.py                                    # Updated 2026-05-07 (auto-resume default; --start as override; bootstrap_done removed)
+│   ├── pipeline_state.py                         # Updated 2026-05-07 (bootstrap_done removed from state)
+│   ├── graph.py                                  # Updated 2026-05-07 (check_preconditions wired in; mark_failed/skip persist to task_status.json)
 │   ├── agent_bridge.py
 │   ├── requirements.txt
-│   ├── config.py.template                        # Updated 2026-05-03 (ROADMAP_JSON_PATH)
+│   ├── config.py.template                        # Updated 2026-05-07 (RUNTIME_VERSION_PIN, RUNTIME_VERSION_CHECK_CMD added)
 │   └── nodes/
 │       ├── __init__.py
-│       ├── load_tasks.py
+│       ├── load_tasks.py                         # Updated 2026-05-07 (merges task_status.json on startup)
+│       ├── check_preconditions.py                # NEW 2026-05-07 (verifies .scaffold_complete + lint/test tools at startup)
 │       ├── compose_prompt.py.template                # Updated 2026-05-06 (D02: `_resolve_project_path` helper hoisted from inline guard)
 │       ├── execute_task.py
-│       ├── verify_task.py                        # Updated 2026-04-19
+│       ├── verify_task.py                        # Updated 2026-05-07 (scaffold branch removed; persists per-verdict to task_status.json)
 │       └── report.py
 └── references/
-    ├── phase-1-analysis.md                       # Updated 2026-04-19
-    ├── phase-2-generation.md                     # Updated 2026-05-03 (roadmap-scenario inlining)
+    ├── phase-1-analysis.md                       # Updated 2026-05-07 (static bootstrap lookup removed; Runtime-Isolation Research protocol added)
+    ├── phase-2-generation.md                     # Updated 2026-05-07 (RUNTIME_VERSION_PIN/CHECK placeholders; static ecosystem table reframed; check_preconditions in template list)
     ├── langgraph-patterns.md
     ├── executor-integration.md
-    └── phase-3-handoff.md                        # Updated 2026-05-06 (D02: Smoke Test section added)
+    └── phase-3-handoff.md                        # Rewritten 2026-05-07 (Validation/Scaffold-Execution/Handoff sections; six-step Phase A protocol)
 
 ~/claude-devtools/skills/prototype-driven-roadmap/
 ├── SKILL.md                                      # Major rewrite 2026-04-30 (OWASP spec migration)
