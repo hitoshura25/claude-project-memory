@@ -1,19 +1,21 @@
 # Prototype-Driven Planning Skills — Project Context
 
 > **Purpose**: Persistent memory across chat sessions for the prototype-driven
-> skill set (planning → task decomposition → implementation).
+> skill set (planning → roadmap → task decomposition → prompt composition → implementation).
 >
 > **Skill locations**:
 > - `~/claude-devtools/skills/prototype-driven-planning/`
-> - `~/claude-devtools/skills/prototype-driven-task-decomposition/`
-> - `~/claude-devtools/skills/prototype-driven-implementation/`
 > - `~/claude-devtools/skills/prototype-driven-roadmap/`
+> - `~/claude-devtools/skills/prototype-driven-task-decomposition/`
+> - `~/claude-devtools/skills/prototype-driven-prompt-composition/`
+> - `~/claude-devtools/skills/prototype-driven-implementation/`
 >
 > **Commands**:
 > - `/prototype-plan <feature>` → planning skill
-> - `/prototype-task-decompose <design-doc>` → decomposition skill
-> - `/prototype-implement <feature>` → implementation skill
 > - `/prototype-roadmap <feature>` → roadmap skill
+> - `/prototype-task-decompose <design-doc>` → decomposition skill
+> - `/prototype-compose-prompts <feature>` → prompt-composition skill
+> - `/prototype-implement <feature>` → implementation skill
 >
 > **Test project**: `~/health-data-ai-platform` (airflow Google Drive ingestion)
 
@@ -25,6 +27,11 @@ Read these files in order:
 1. **This file** — orientation, standings, open issues
 2. **`LEARNINGS.md`** — distilled principles (always relevant)
 3. **`trials/_SUMMARY.md`** — scoreboard
+4. **Most recent dated session-status file** if one exists at the top of the
+   memory repo (e.g. `session-status-YYYY-MM-DD.md`). These capture mid-stream
+   handoff context — what was done in the last session, what's pending, what
+   to verify before continuing. They live alongside plan docs and supersede
+   each other; only the most recent one matters.
 
 Load on-demand only when needed:
 - `references/architecture-rationale.md`
@@ -55,10 +62,51 @@ Load on-demand only when needed:
   (Phase A in conversation; Phase B in pipeline) and replacing the
   static bootstrap lookup with research-at-runtime. Skill changes
   landed 2026-05-07; T16 validates end-to-end.
+- `prompt-composition-skill-plan-2026-05-09.md` — **Active plan** for
+  extracting prompt generation into its own skill. Step 1 (build the
+  new skill) landed 2026-05-10; steps 2–5 (implementation-skill
+  changes, slash command, README update, T17 trial) pending. The
+  slash command + this README update landed alongside step 1.
 
 ---
 
-## Current State (2026-05-07)
+## Current State (2026-05-10)
+
+> **Recent change (2026-05-10): prompt-composition skill built.** Step 1
+> of `prompt-composition-skill-plan-2026-05-09.md` landed: new
+> `prototype-driven-prompt-composition` skill at
+> `~/claude-devtools/skills/prototype-driven-prompt-composition/` with
+> `SKILL.md`, `scripts/compose_prompts.py` (~32 KB standalone Python,
+> no LangGraph dep), and four reference docs (`preamble.md` —
+> verbatim universal preamble extracted from the implementation
+> skill's `compose_prompt.py.template` with the project block removed
+> per D9; `prompt-template.md`; `log-conventions.md`;
+> `dependency-handling.md`). Slash command
+> `/prototype-compose-prompts` added at
+> `~/claude-devtools/commands/prototype-compose-prompts.md`. The
+> script's pure helper functions were sandbox-tested (67 assertions,
+> all pass) covering inlineable-extension derivation, scenario
+> rendering (functional + security, prescribed evidence kind),
+> dependency listing (paths only, no inlining), section assembly,
+> required-marker validation, and D9 (no project block) +
+> D10 (scaffold task gets a prompt) verification. End-to-end smoke
+> test against the real `airflow-gdrive-ingestion` decomposition
+> requires running the script on the host (uv + pydantic + project
+> filesystem) and is the next session's first task. **Steps 2–5
+> pending**: (2) implementation-skill changes — delete
+> `nodes/compose_prompt.py.template`, add `nodes/load_prompt.py`,
+> update `verify_task.py` for the new per-attempt log-folder
+> convention, update `check_preconditions.py` to verify all prompt
+> files exist, drop `{{ROADMAP_JSON_PATH}}` from `config.py.template`;
+> (3) memory repo full update; (4) T17 trial against
+> airflow-gdrive-ingestion validating both consumption paths
+> (manual Claude Code on a single prompt + full pipeline run). See
+> `session-status-2026-05-10.md` for the next-session handoff
+> (smoke-test instructions, expected output, what to verify before
+> step 2). **No implementation-skill changes yet — the pipeline still
+> uses the old `compose_prompt.py.template`.** Don't run
+> `/prototype-implement` against the new prompts yet; the pipeline
+> won't read them.
 
 > **Recent change (2026-05-07): Phase A/B scaffold split + research-at-runtime
 > for runtime isolation.** T15 ran twice (2026-05-07 11:33 and 15:54)
@@ -267,6 +315,23 @@ path resolution after the T15 first attempt surfaced a CWD-implicit
 bug; `_resolve_project_path` helper now replaces four
 `Path(p).resolve()` call sites in `task_schema.py`.
 
+**prototype-driven-prompt-composition** — Built 2026-05-10 per
+`prompt-composition-skill-plan-2026-05-09.md` step 1. Standalone
+Python script + four reference docs. Reads `tasks.json` + `roadmap.json`,
+writes one self-contained markdown prompt per task to
+`tasks/<feature>/prompts/<task-id>.md`. The universal preamble
+(extracted verbatim from the implementation skill's old
+`compose_prompt.py.template` minus the project block) is uniform
+across all tasks; dependency files are listed by path (no inlining);
+retry/error context lives in `logs/lint/<task-id>/` and
+`logs/tests/<task-id>/` per-attempt files; canonical prompts are
+never modified after composition. Pure helper functions sandbox-tested
+(67 assertions). End-to-end smoke test pending — needs host execution
+against the real `airflow-gdrive-ingestion` decomposition. **Steps
+2–5 pending** (implementation-skill changes, T17 trial); the pipeline
+still consumes prompts via the old `compose_prompt.py.template` until
+step 2 lands.
+
 **prototype-driven-implementation** — LangGraph pipeline with
 templated stable files; verbatim `test_command` copy from the schema.
 T14 refactor landed 2026-04-19. D02 (2026-05-06) added a parallel
@@ -291,7 +356,11 @@ or from runtime web research, locates the project's runtime
 version pin, constructs the bootstrap command, and tests it in a
 temp dir before committing. Two new config placeholders
 (RUNTIME_VERSION_PIN, RUNTIME_VERSION_CHECK_CMD) drive Phase 3's
-active-runtime-matches-pin verification. Validates in T16.
+active-runtime-matches-pin verification. Validates in T16. **Per the
+2026-05-09 prompt-composition refactor (steps 2–5 pending), the
+pipeline will eventually consume pre-generated prompts via a new
+`load_prompt` node and lose its `compose_prompt.py.template`
+entirely — but as of 2026-05-10 that change has not landed.**
 
 **prototype-driven-roadmap** — Three phases (Extraction → Generation
 → Validation) producing `components.json` + `roadmap.json` (post-
@@ -492,7 +561,7 @@ sections silently contradict.
 ### Features List (high-level)
 
 Full per-feature list (1–53) preserved in git history. Recent
-additions (2026-04-27 → 2026-04-30):
+additions (2026-04-27 → 2026-05-10):
 
 - **54: Project setup decision in planning Phase 1.** Binary
   greenfield-vs-extending decision with five triggers and three edge
@@ -525,6 +594,13 @@ additions (2026-04-27 → 2026-04-30):
   Spec data files carry explicit verification metadata; "as of
   <date>" prose pretending verification is now a banned anti-pattern.
   (2026-04-30)
+- **62: Prompt composition extracted into its own skill.** Reads
+  tasks.json + roadmap.json, writes one self-contained markdown
+  prompt per task. Pipeline becomes one consumer among several;
+  manual consumers (Claude Code, Aider, custom wrappers) read the
+  same canonical prompts. Per-attempt log subfolder convention
+  replaces in-prompt retry/error context. (2026-05-10, step 1 of
+  multi-step refactor; steps 2–5 pending.)
 
 ### Skill Expansion Plan — Complete
 
@@ -539,11 +615,49 @@ All parts of `skill-expansion-plan-2026-04-21.md` have landed:
 
 The plan doc is historical. New skill expansions live in new plan
 docs (`planning-project-setup-component-plan-2026-04-27.md`,
-`asvs-5-migration-plan-2026-04-30.md`).
+`asvs-5-migration-plan-2026-04-30.md`,
+`prompt-composition-skill-plan-2026-05-09.md`).
 
 ---
 
 ## Next Steps
+
+- **Smoke-test the prompt-composition skill end-to-end on the host.**
+  First task of the next session. From the host (this script needs
+  pydantic + the project filesystem; the chat sandbox can't run it):
+  ```bash
+  cd ~/health-data-ai-platform
+  uv run --with pydantic python ~/claude-devtools/skills/prototype-driven-prompt-composition/scripts/compose_prompts.py airflow-gdrive-ingestion
+  ```
+  Expected output: Phase 1 STOP-summary listing inputs + extensions
+  + 12 tasks + ~33 citations; Phase 2 writing 12 prompt files;
+  Phase 3 confirming all 12 found, all non-empty, all required
+  markers present. If any prompts/ directory exists from a prior
+  run, delete it first
+  (`rm -rf ~/health-data-ai-platform/tasks/airflow-gdrive-ingestion/prompts`).
+  See `session-status-2026-05-10.md` for full detail and what to
+  verify in the output.
+
+- **Steps 2–5 of `prompt-composition-skill-plan-2026-05-09.md`.**
+  After the smoke test passes and the user reviews 2-3 of the
+  generated prompt files: (2) implementation-skill changes — delete
+  `templates/nodes/compose_prompt.py.template`, add
+  `templates/nodes/load_prompt.py`, modify `verify_task.py` to write
+  to `logs/lint/<task-id>/attempt-N-tierM.txt` and the matching
+  tests/ path, modify `check_preconditions.py` to verify all prompt
+  files exist, modify `graph.py` to wire `load_prompt` between
+  `pick_next_task` and `execute_task`, modify `pipeline_state.py`
+  to drop `current_lint_error_path` / `current_test_error_path`
+  (no longer needed; convention replaces injected paths), modify
+  `config.py.template` to remove `{{ROADMAP_JSON_PATH}}`. Update
+  SKILL.md (precondition added; Phase 2 step removed; Phase 3 smoke
+  test simplifies; Scaffold Execution reads from prompts dir per
+  D10), `phase-2-generation.md`, `phase-3-handoff.md`. (3) trial
+  slot stage in memory repo. (4) T17 trial: pre-trial cleanup,
+  five-arm validation (generate prompts, manual inspect, hand to
+  Claude Code without pipeline, run pipeline, validate retry
+  behavior). (5) Post-trial memory repo update — distill new
+  principles, mark plan superseded.
 
 - **T16 — validates the Phase A/B scaffold split end-to-end.**
   Pre-trial setup: user removes existing
@@ -569,11 +683,12 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
   isolation step shows visible research output (URLs, tool choice
   rationale) rather than table consultation; bootstrap command
   contains an explicit runtime-version specifier; pipeline completes
-  all 12 tasks. Out of scope: validating runtime-isolation against
-  non-Python ecosystems (responsibility-not-realization framing makes
-  this safe in principle; future trial will validate with a Node /
-  Android / Go project). Detail in `trials/T16-phase-a-scaffold-split.md`
-  once filed.
+  all 12 tasks. **T16 may run before or after the prompt-composition
+  steps 2–5; they're independent.** Out of scope: validating
+  runtime-isolation against non-Python ecosystems (responsibility-
+  not-realization framing makes this safe in principle; future trial
+  will validate with a Node / Android / Go project). Detail in
+  `trials/T16-phase-a-scaffold-split.md` once filed.
 
 - **T15 — superseded by T16.** T15's two attempts (2026-05-07 11:33
   and 15:54) blocked at task-01 on Python version incompatibility
@@ -618,6 +733,11 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - D01 (2026-05-04) — First decomposition-skill iteration trial; validates roadmap consumption (step 3 of three-skill refactor). 13 tasks across 5 components, 60 scenario citations all resolve, clean sweep.
 - D02 (2026-05-06) — CWD-relative path resolution surfaced at T15 first attempt. Schema-side `_resolve_project_path` helper added; parallel helper in `compose_prompt.py.template`; Phase 3 smoke test added. Project-side artifacts unchanged per directive.
 
+### Prompt-Composition Skill
+- Sandbox helper test (2026-05-10) — 67 assertions, all pass. Pure
+  helper logic verified. End-to-end smoke test against the host is
+  the next session's first task.
+
 ### Implementation Skill — runs 1–14
 See `trials/_SUMMARY.md` for the canonical scoreboard.
 
@@ -651,6 +771,9 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ├── decomposition-roadmap-refactor-plan-2026-04-26.md  # Paused; needs §4.4/§5.1/§7/§9.1 update for JSON output
 ├── planning-project-setup-component-plan-2026-04-27.md # Landed 2026-04-27
 ├── asvs-5-migration-plan-2026-04-30.md           # Landed 2026-04-30
+├── phase-a-scaffold-split-plan-2026-05-07.md     # Active; T16 validates
+├── prompt-composition-skill-plan-2026-05-09.md   # Active; step 1 landed 2026-05-10; steps 2-5 pending
+├── session-status-2026-05-10.md                  # Mid-stream handoff for the prompt-composition refactor
 ├── references/
 │   ├── architecture-rationale.md
 │   └── stack-reference.md
@@ -679,6 +802,16 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     ├── task-writing-guide.md                     # Updated 2026-05-03 (Roadmap-Driven Task Authoring section)
     └── output-format.md                          # Updated 2026-05-03 (new fields, summary table reshape, Integration with Roadmap)
 
+~/claude-devtools/skills/prototype-driven-prompt-composition/  # NEW 2026-05-10
+├── SKILL.md                                      # Three-phase flow: Inputs → Generation → Validation
+├── scripts/
+│   └── compose_prompts.py                        # Standalone (no LangGraph dep); reads tasks.json + roadmap.json
+└── references/
+    ├── preamble.md                               # Verbatim universal preamble (project block removed per D9)
+    ├── prompt-template.md                        # Canonical section structure for downstream consumers
+    ├── log-conventions.md                        # logs/lint/<task-id>/attempt-N-tierM.txt convention
+    └── dependency-handling.md                    # Option A (paths-not-inlined) rationale + deferred A+ notes
+
 ~/claude-devtools/skills/prototype-driven-implementation/
 ├── SKILL.md                                      # Updated 2026-05-07 (Phase A/B split, runtime-isolation research, no static bootstrap table)
 ├── templates/
@@ -692,9 +825,9 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 │       ├── __init__.py
 │       ├── load_tasks.py                         # Updated 2026-05-07 (merges task_status.json on startup)
 │       ├── check_preconditions.py                # NEW 2026-05-07 (verifies .scaffold_complete + lint/test tools at startup)
-│       ├── compose_prompt.py.template                # Updated 2026-05-06 (D02: `_resolve_project_path` helper hoisted from inline guard)
+│       ├── compose_prompt.py.template                # Updated 2026-05-06 (D02: `_resolve_project_path` helper hoisted from inline guard); SLATED FOR DELETION in step 2 of prompt-composition refactor
 │       ├── execute_task.py
-│       ├── verify_task.py                        # Updated 2026-05-07 (scaffold branch removed; persists per-verdict to task_status.json)
+│       ├── verify_task.py                        # Updated 2026-05-07 (scaffold branch removed; persists per-verdict to task_status.json); WILL BE UPDATED in step 2 of prompt-composition refactor (per-attempt log convention)
 │       └── report.py
 └── references/
     ├── phase-1-analysis.md                       # Updated 2026-05-07 (static bootstrap lookup removed; Runtime-Isolation Research protocol added)
@@ -722,6 +855,8 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 
 ~/claude-devtools/commands/
 ├── prototype-plan.md
+├── prototype-roadmap.md
 ├── prototype-task-decompose.md
-└── prototype-roadmap.md
+├── prototype-compose-prompts.md                  # NEW 2026-05-10
+└── prototype-implement.md
 ```
