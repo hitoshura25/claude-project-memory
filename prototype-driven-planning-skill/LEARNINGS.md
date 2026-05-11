@@ -843,3 +843,59 @@ surfaced lessons that generalize across the skill set.
   individual projects.
 - **Skill content must not reference trial numbers or chat-specific history**.
   Skill guidance should explain the *principle* and *why*.
+
+## From Prompt-Composition Skill (2026-05-10)
+
+- **SKILL.md as instructions vs. SKILL.md as invoker.** A skill
+  structured as "here's what to do in steps" (Phase 1 → 2 → 3 prose)
+  invites Claude Code to execute the steps itself rather than
+  invoke the bundled script. We hit this directly: Claude Code
+  read SKILL.md, wrote a 130-line inline `/tmp/gen_prompts.py` that
+  re-implemented the skill from scratch, and produced output
+  inconsistent with the shipped script's behavior. The fix is
+  structural: SKILL.md describes how to invoke the script and
+  surface its output, not what the script does step-by-step. The
+  substantive format documentation lives in `references/`. This
+  pattern matters whenever the skill produces a deterministic
+  artifact that downstream consumers (other skills, trials, the
+  pipeline) compare across runs — LLM rendering breaks the
+  comparison invariant the script was extracted to preserve.
+
+- **"Source vs. non-source" filters are LLM bait.** The
+  prompt-composition skill originally had a rule excluding
+  "non-source files" (config YAML, Dockerfiles, etc.) from the
+  generated `## Dependencies` section. The script's implementation
+  matched on any non-empty file extension, but the SKILL.md prose
+  said "non-source files are excluded" — ambiguous about which
+  extensions counted. Different Claude Code sessions resolved the
+  ambiguity differently (`{.py}` vs. `{.py, .toml, .txt, .yml}`),
+  producing different outputs from the same input. The fix is to
+  remove the filter entirely: decomposition declares what a task
+  produces; downstream tasks declare what they depend on; the
+  composition layer reflects that faithfully without
+  second-guessing. Generally: if a skill rule depends on a
+  classification the LLM has to perform ("source" vs. "non-source",
+  "important" vs. "trivial"), the classification is the failure
+  point. Replace with structural rules grounded in schema fields
+  the decomposition is required to populate.
+
+- **Snapshot tests catch reimplementation drift.** The standard
+  case for snapshot tests is regression detection: assert today's
+  output matches yesterday's. But they also catch a less obvious
+  failure mode: if Claude Code reimplements the skill in chat
+  instead of running the script, the live output won't match the
+  committed snapshot — because Claude Code's rendering is
+  nondeterministic across sessions, while the snapshot was
+  committed from a real script run. One snapshot directory + one
+  diff is enough; no test framework needed. The minimal
+  infrastructure (a `verify.sh` that diffs against
+  `tests/expected/`) is proportional to the value.
+
+- **Filesystem MCP `edit_file` is unreliable on em-dashes.** When a
+  skill file contains — (U+2014) characters, `edit_file`'s exact
+  character match fails even when the visible text looks right. The
+  workaround is `write_file` for full rewrites of any file
+  containing em-dashes. For larger refactors this is fine; for tiny
+  edits to such files it's an annoyance worth budgeting around. The
+  pattern that's reliable: read the whole file, modify in memory,
+  write the whole file back.
