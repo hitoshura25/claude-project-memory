@@ -67,10 +67,98 @@ Load on-demand only when needed:
   new skill) landed 2026-05-10; steps 2–5 (implementation-skill
   changes, slash command, README update, T17 trial) pending. The
   slash command + this README update landed alongside step 1.
+- `observability-and-citations-plan-2026-05-14.md` — Landed
+  2026-05-14 (all 8 steps). Adds Phase 1 Observability-Friendly Tech
+  Selection, Source Citations with `accessed <YYYY-MM-DD>`, Phase 2
+  Telemetry + Performance Measurement validation steps, Phase 3
+  External-source label + References section, 3 new SKILL.md
+  principles. Post-P06 fixes landed 2026-05-15 → 2026-05-16 (Plan A:
+  web-research discipline; Plan B: downstream-skill references
+  removed). Plan doc is historical; new work for this skill lives in
+  new plan docs.
 
 ---
 
-## Current State (2026-05-10)
+## Current State (2026-05-16)
+
+> **Recent change (2026-05-15 → 2026-05-16): planning skill
+> observability expansion + post-P06 fixes.** Two-phase work. Phase 1
+> (2026-05-14): observability-and-citations expansion landed all 8
+> steps of `observability-and-citations-plan-2026-05-14.md` — Phase 1
+> Step 5 Observability-Friendly Tech Selection (per-candidate ×
+> dimension verdicts: Strong/Adequate/Weak, with justification +
+> workaround for any Adequate or Weak); Phase 1 Step 5 Source
+> Citations subsection (URL + `accessed <YYYY-MM-DD>` format, three
+> anti-patterns banned: "as of <date>" prose, training-data
+> citations, silent omission); Phase 2 Telemetry Instrumentation
+> Validation step (responsibility + applicability gate + signals +
+> research protocol + demonstrated viewing path + what to capture);
+> Phase 2 Performance Measurement Validation step (same structural
+> shape, three project categories: UI rendering / backend latency /
+> batch timing); Phase 3 External-source label as fifth element of
+> Judgment vs Observation discipline (label hierarchy: Cliff edge >
+> observation-with-evidence > Not observed > External > Prescribed);
+> Phase 3 References section (silence-not-allowed rule); design-doc
+> template updates (5-label meta-commentary, Telemetry + Performance
+> subsections under `## Tooling`, References section); SKILL.md
+> updates (Phase 1 Step 5 expansion fold-in, Phase 1 Step 6
+> tech-selection bullet, Phase 2 new Steps 8-9 with renumbering of
+> End-to-End → 10 and Cross-Cutting Research → 11, STOP report
+> bullets, 3 new principles: "Tech selection is observability-checked
+> before scope is approved", "Observability is prototype-validated
+> before the design doc prescribes it", "External claims cite sources
+> with `accessed <YYYY-MM-DD>`"). Phase 2 (2026-05-15 → 2026-05-16):
+> P06 trial run against `airflow-gdrive-ingestion` exposed two
+> distinct gaps the expansion didn't cover. **Gap 1**: research-shaped
+> instructions elsewhere in the skill defaulted to training-data
+> recall, not web search. The expansion's own steps worked because
+> they spelled out the searches ecosystem-by-ecosystem; the older
+> steps (Phase 1 Research, Phase 2 Cross-Cutting Research, Mitigation
+> Ladder) used the word "research" without naming tools. Concrete
+> failure: P06 ran Trivy, formed verdicts on fix availability from
+> Trivy output alone, treated HIGH findings without a Trivy-surfaced
+> fix as "unresolvable" until user prompted to search. Same
+> silent-recall behavior likely operating across all research steps,
+> not security-specific. **Gap 2**: skill files contained stale
+> references to downstream skills (roadmap, task-decomposition,
+> "implementation pipeline", "Phase 4", "downstream skills will try
+> to run them", "downstream skills tag as non-negotiable", etc.). The
+> references encoded the *reason for a rule* in terms of downstream
+> consumption rather than the rule's intrinsic justification, making
+> the skill non-standalone. **Fix Plan A (research discipline) — 5
+> sub-edits landed**: new SKILL.md principle "Research means web
+> research, not training-data recall" as cross-cutting default;
+> Mitigation Ladder gains "Before declaring an option unavailable,
+> search" preamble with 5 search targets (CVE ID/NVD/GHSA, package +
+> CVE, GitHub issues, CHANGELOG, distro tracker); per-section
+> preambles in Phase 1 Research and Phase 2 Cross-Cutting Research
+> naming `web_search` and `web_fetch` explicitly; LEARNINGS.md gains
+> "From P06" subsection with 4 distilled learnings (training-recall
+> default, local-tool-output-as-research-boundary = same
+> stop-thinking anti-pattern in a new costume, per-option search
+> rule, principles→specifics cross-references reinforce discipline
+> at point of use). **Fix Plan B (downstream-skill references
+> removed) — 14 sub-edits landed**: every reference to downstream
+> skills, downstream pipelines, downstream task decomposer, roadmap
+> skill, Phase 4, etc. removed across SKILL.md and all 4 reference
+> files. Where downstream-consumption rationale was load-bearing
+> (Cliff edge label "why does the label matter"), replaced with
+> intrinsic rationale (boundary conditions that must not be
+> substituted at implementation time). Renamed "Consumability for
+> Future Phases" section to "Structural Consistency". Final grep
+> audit: 7 remaining `downstream` mentions, all legitimately referring
+> to **downstream teams (humans)** or **downstream in time**
+> (workarounds applying to later prototype build) — not downstream
+> skills. The skill is now genuinely standalone; rules and rationale
+> justify themselves on the skill's own terms. **Files touched**:
+> `SKILL.md`, `references/phase-1-discovery.md`,
+> `references/phase-2-prototype.md`,
+> `references/phase-3-design-doc.md`,
+> `references/design-doc-template.md`, `LEARNINGS.md`. Plan doc:
+> `observability-and-citations-plan-2026-05-14.md`. P06 trial detail
+> to be filed at
+> `trials/P06-research-discipline-and-downstream-cleanup.md` before
+> next session.
 
 > **Recent change (2026-05-10): prompt-composition skill built.** Step 1
 > of `prompt-composition-skill-plan-2026-05-09.md` landed: new
@@ -300,9 +388,17 @@ Load on-demand only when needed:
 ### Built and Validated
 
 **prototype-driven-planning** — Major expansion landed 2026-04-23 after
-the P01–P03 arc. Project Setup component addition landed 2026-04-27
-(validates in P05). Detail in the P01–P03 and Project Setup sections
-below.
+the P01–P03 arc. Project Setup component addition landed 2026-04-27.
+P04 (2026-04-29) added cliff-edge labeling discipline. Observability-
+and-citations expansion landed 2026-05-14 (8 steps adding Phase 1
+Observability-Friendly Tech Selection, source citations with
+`accessed <YYYY-MM-DD>`, Phase 2 Telemetry and Performance Measurement
+validation steps, Phase 3 External-source label, References section,
+3 new principles). Post-P06 fixes landed 2026-05-15 → 2026-05-16:
+Plan A (web-research discipline across all research-shaped steps),
+Plan B (all downstream-skill references removed; skill now genuinely
+standalone). Detail in the P01–P03, Project Setup, P04, and most
+recent Current State sections.
 
 **prototype-driven-task-decomposition** — Required `test_command: str`
 field with two validators landed 2026-04-19 (T14). Refactor to consume
@@ -704,6 +800,17 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - **P04 validation trial (planning skill, P01–P03 fixes).** Lower
   priority. Still on the list.
 
+- **File P06 trial detail.** P06 ran 2026-05-15 against
+  `airflow-gdrive-ingestion`; surfaced the two gaps that drove
+  Plans A and B. Trial file at
+  `trials/P06-research-discipline-and-downstream-cleanup.md` not yet
+  written. Capture: design doc output's behavior on the gaps (model
+  ran Trivy, reported HIGH as unresolvable until prompted to search;
+  design doc generated with stale skill references intact); the
+  conversation reasoning that landed on Plans A vs. B vs. "remove
+  references entirely"; the final landing log. Lower priority — the
+  fixes are in, the README and LEARNINGS.md captures the substance.
+
 - **(Done) Manual cleanup**:
   `~/claude-devtools/skills/prototype-driven-implementation/templates/nodes/bootstrap.py`
   tombstone confirmed deleted 2026-05-04.
@@ -724,7 +831,18 @@ docs (`planning-project-setup-component-plan-2026-04-27.md`,
 - P01 (2026-04-23) — First Part A + C trial
 - P02 (2026-04-23) — Second Part A + C trial (design-doc review)
 - P03 (2026-04-23) — Third Part A + C trial (security-finding handling)
+- P04 (2026-04-29) — Cliff-edge labeling discipline trial. Detail in
+  `trials/P04-cliff-edge-labeling-discipline.md`.
 - P05 (2026-05-01) — Project Setup component validation. Done; design doc updated to include Project Setup component as first entry.
+- P06 (2026-05-15) — Post-observability-expansion trial against
+  `airflow-gdrive-ingestion`. Surfaced two gaps: (1) research-shaped
+  instructions elsewhere in the skill defaulted to training-data
+  recall when they didn't explicitly name web search; (2) stale
+  references to downstream skills throughout the skill files. Both
+  gaps fixed via Plans A and B (landed 2026-05-15 → 2026-05-16). The
+  expansion's own rules (live tech-selection research, web-searched
+  citations) worked as designed. Trial detail to be filed at
+  `trials/P06-research-discipline-and-downstream-cleanup.md`.
 
 ### Decomposition Skill
 - Session `6d471491-32b7-4f74-a720-8fdbf0060023` — First run (8 tasks)
@@ -773,6 +891,7 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
 ├── asvs-5-migration-plan-2026-04-30.md           # Landed 2026-04-30
 ├── phase-a-scaffold-split-plan-2026-05-07.md     # Active; T16 validates
 ├── prompt-composition-skill-plan-2026-05-09.md   # Active; step 1 landed 2026-05-10; steps 2-5 pending
+├── observability-and-citations-plan-2026-05-14.md  # Landed 2026-05-14 (8 steps); post-P06 fixes landed 2026-05-15 → 2026-05-16
 ├── session-status-2026-05-10.md                  # Mid-stream handoff for the prompt-composition refactor
 ├── references/
 │   ├── architecture-rationale.md
@@ -786,12 +905,12 @@ See `trials/_SUMMARY.md` for the canonical scoreboard.
     └── D<NN>-<slug>.md                           # Decomposition-skill iterations (D01, D02)
 
 ~/claude-devtools/skills/prototype-driven-planning/
-├── SKILL.md                                      # Updated 2026-04-27
+├── SKILL.md                                      # Updated 2026-05-16 (observability expansion + post-P06 fixes)
 └── references/
-    ├── design-doc-template.md
-    ├── phase-1-discovery.md
-    ├── phase-2-prototype.md                      # Updated 2026-04-23
-    └── phase-3-design-doc.md                     # Updated 2026-04-27
+    ├── design-doc-template.md                    # Updated 2026-05-16 (5-label meta, Telemetry/Performance fields, References)
+    ├── phase-1-discovery.md                      # Updated 2026-05-16 (Observability Tech Selection, Source Citations, web-research preamble)
+    ├── phase-2-prototype.md                      # Updated 2026-05-16 (Telemetry + Performance validation, Mitigation Ladder search preamble, Cross-Cutting web-research preamble)
+    └── phase-3-design-doc.md                     # Updated 2026-05-16 (External-source label, References section, downstream-skill references removed)
 
 ~/claude-devtools/skills/prototype-driven-task-decomposition/
 ├── SKILL.md                                      # Updated 2026-05-03 (roadmap consumption)

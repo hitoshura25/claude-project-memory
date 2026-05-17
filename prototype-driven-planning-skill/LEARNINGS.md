@@ -200,6 +200,75 @@ prevents this?" but "what reasoning did the model do silently that should
 have been made visible?" The artifact that forces the visibility is the
 fix.
 
+### From P06 (post-observability-expansion trial, 2026-05-15)
+
+The planning skill was re-run end-to-end against `airflow-gdrive-ingestion`
+after the observability-and-citations expansion landed. The expansion's
+own rules (live tech-selection research, web-searched citations) worked
+as designed; the trial exposed a deeper gap in the older content the
+expansion did not patch.
+
+- **Research-shaped instructions default to training-data recall when
+  they don't explicitly name web search.** The observability sections
+  added in the expansion forced live `web_search` / `web_fetch` calls
+  because they spelled out the searches ecosystem-by-ecosystem. The
+  older research-shaped steps — Phase 1 "Research," Phase 2 "Research
+  cross-cutting concerns," the Mitigation Ladder's option-availability
+  judgments — used the word "research" without naming the tools. The
+  P05 model interpreted those as "reason about X with the context I
+  have" rather than "go fetch authoritative current information." The
+  concrete failure surfaced in security remediation: the model ran Trivy,
+  consumed its output, formed verdicts on whether fixes existed from
+  that output alone, and treated HIGH findings without a Trivy-surfaced
+  fix as "unresolvable." After explicit user prompting to search,
+  upstream fixes that were available but not reflected in Trivy's DB
+  surfaced quickly. The pattern was not security-specific — the same
+  silent-recall behavior was operating across all the skill's research
+  steps. (P06)
+
+- **Local tool output as the boundary of research is the same
+  stop-thinking-instruction anti-pattern, in a new costume.** Static
+  ecosystem-to-tool tables freeze the *answer*. Treating local tool
+  output as authoritative freezes the *boundary of inquiry*. Same
+  shape — a written-down or just-implicit edge to thinking, treated
+  as complete — same failure mode. The fix is the same: name the
+  responsibility (resolve the finding / answer the research question),
+  name the signals (existing project conventions, vendor docs,
+  community workarounds), force the model to do the work at use time.
+  In this case the work is `web_search` and `web_fetch`. A new SKILL.md
+  principle ("Research means web research, not training-data recall")
+  establishes the default at the top-level; per-step preambles in
+  Phase 1 Research, Phase 2 Cross-Cutting Research, and the Mitigation
+  Ladder reinforce it where the failure was actually observed. (P06)
+
+- **The Mitigation Ladder needs an explicit "search before declaring
+  unavailable" rule on every option, not just on the ladder as a
+  whole.** P06 showed the model concluding "option 1 (upgrade) is
+  unavailable" because Trivy reported `fix: NONE` for a Debian base-
+  image CVE — when in fact the Debian Security Tracker recorded the
+  fix was available in `sid` and the prototype was already pulling
+  the fixed version, just from a source Trivy's DB didn't recognize.
+  Without the search step, the ladder would have escalated all the
+  way to option 5 (accept with compensating controls) and the user
+  would never have learned the finding was actually already mitigated.
+  The fix is a preamble to the ladder's options spelling out the
+  exact searches each option's "unavailable" verdict requires (CVE
+  ID lookup, package issues, CHANGELOG, distro tracker), with the
+  recursive note that this applies to every option independently.
+  (P06)
+
+- **Citing skill references inside reference files keeps the
+  cross-cutting discipline alive at point of use.** The new SKILL.md
+  principle could have stood alone, but a Mitigation Ladder reading a
+  decade later doesn't naturally route through SKILL.md. Each per-step
+  preamble that adds the web-research discipline also adds a `See
+  SKILL.md § Principles "Research means web research, not training-
+  data recall"` pointer. Cross-references that go one direction
+  (principles → specifics) are documentation; cross-references that
+  go the other direction (specifics → principles) are reinforcement.
+  Both directions matter when the failure mode is silent shortcut
+  rather than explicit dissent. (P06)
+
 ## From Task Decomposition Skill
 
 - **TDD pairing is structural, not advisory**: The schema enforces
